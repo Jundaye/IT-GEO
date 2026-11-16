@@ -37,6 +37,11 @@ public class BuildingTO {
 	private double welfDist;
 	private double lng;
 	private double lat;
+	// 2026-11-16 전처리 자동화로 추가된 컬럼 (값이 없으면 null)
+	private Integer rentYn;      // 공공임대 단지 1/0
+	private Integer narrowRd;    // 도로폭 4m 미만 도로에 접함 1/0
+	private String strctNm;      // 건축물대장 구조명 (대장 미연결이면 null)
+	private Integer ugrndUnits;  // 지하층 전유 호 수 (공동주택만). 점수는 ugrnd_res 기준 그대로
 
 	// 계산 컬럼
 	private int score;          // 취약 점수 (100점 만점)

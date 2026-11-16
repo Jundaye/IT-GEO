@@ -23,6 +23,10 @@
         <c:out value="${sessionScope.loginMember.userNm}"/> <c:out value="${sessionScope.loginMember.rankNm}"/>
       </span>
     </c:if>
+    <%-- 데이터 업데이트 : 서울시청 계정만 (매일 쓰는 화면이 아니라 탭에는 넣지 않는다) --%>
+    <c:if test="${not empty sessionScope.loginMember and not sessionScope.loginMember.guUser}">
+      <a href="${ctx}/dataupdate.do" class="btn btn-line btn-sm ${activeMenu == 'dataupdate' ? 'active' : ''}">데이터 업데이트</a>
+    </c:if>
     <a href="${ctx}/logout.do" class="btn btn-line btn-sm">로그아웃</a>
   </div>
 </header>

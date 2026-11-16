@@ -42,10 +42,12 @@ window.MapPanel = (function () {
     $('#dScoreItems').html(d.scoreItems.map(function (it) { return scoreRow(it, maxW); }).join(''));
 
     var floors = (b.grndFlr != null ? '지상 ' + b.grndFlr + '층' : '') + (b.ugrndFlr ? ' / 지하 ' + b.ugrndFlr + '층' : '');
+    if (b.ugrndUnits > 0) floors += (floors ? ' · ' : '') + '지하 전유 ' + b.ugrndUnits + '호';   // 공동주택 전유부 기준 (점수와 무관)
+    var use = (b.useNm || '미상') + (b.strctNm ? ' (' + b.strctNm + ')' : '');                      // 구조는 용도 뒤 괄호로
     var apr = b.useaprDay && b.useaprDay.length === 8 ? b.useaprDay.slice(0, 4) + '.' + b.useaprDay.slice(4, 6) + '.' + b.useaprDay.slice(6) + (b.bldAge != null ? ' (' + b.bldAge + '년)' : '') : '자료 없음';
     /* 건축물대장에 있는 값만 */
     $('#dInfo').html(
-      infoRow('주용도', b.useNm || '미상') + infoRow('층수', floors || '-') + infoRow('사용승인', apr)
+      infoRow('주용도', use) + infoRow('층수', floors || '-') + infoRow('사용승인', apr)
       + infoRow('위반건축물', b.violYn === '1' ? '해당' : b.violYn === '0' ? '없음' : '대장 미연계')
       + infoRow('세대수', b.units != null ? b.units + '세대' : '-')
     );
