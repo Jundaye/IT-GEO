@@ -161,6 +161,24 @@
     </div>
   </main>
 
+  <%-- ================= 건물 3D 입체보기 : 건물 상세 패널 바로 왼쪽 (map-3d.js · 브이월드 WebGL 3D, iframe 은 처음 열 때 불러옴) ================= --%>
+  <section class="bld3d" id="bld3d" hidden>
+    <div class="b3-head">
+      <b>건물 3D 입체보기</b><span class="b3-sub" id="b3Sub"></span>
+      <button type="button" class="b3-btn on" id="b3Only" title="주변 건물 보이기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="4" width="8" height="16"/><path d="M3 20h18"/></svg></button>
+      <button type="button" class="b3-btn" id="b3Rotate" title="자동 회전">⟳</button>
+      <button type="button" class="b3-btn" id="b3Expand" title="크게 보기 / 작게 보기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button type="button" class="b3-btn" id="b3Close" title="닫기">×</button>
+    </div>
+    <div class="b3-stage">
+      <iframe id="b3Frame" title="건물 3D 입체보기"></iframe>
+      <div class="b3-status" id="b3Status"></div>
+      <div class="b3-hint">드래그 = 건물 둘레로 360° 회전 · 휠 = 확대/축소</div>
+    </div>
+    <div class="b3-legend" id="b3Legend"></div>
+    <div class="b3-note" id="b3Note"></div>
+  </section>
+
   <%-- ================= 오른쪽 : 결과 리스트 / 건물 상세 ================= --%>
   <aside class="right-panel" id="panelRight">
 
@@ -205,6 +223,7 @@
 <script src="${pageContext.request.contextPath}/resources/js/map/map-layer.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-marker.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-result.js"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-3d.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-panel.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-main.js"></script>
 </body>

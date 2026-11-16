@@ -302,7 +302,8 @@ $(function () {
 
   if (live()) {
     naver.maps.Event.addListener(map, 'zoom_changed', onLevelChanged);
-    naver.maps.Event.addListener(map, 'idle', function () { scheduleLoad(); onMoved(); });
+    naver.maps.Event.addListener(map, 'bounds_changed', function () { if (window.Bld3D) Bld3D.moving(); });   // 지도가 움직이는 동안 3D 작업 미룸 (map-3d.js)
+    naver.maps.Event.addListener(map, 'idle', function () { scheduleLoad(); onMoved(); if (window.Bld3D) { Bld3D.idle(); Bld3D.warmup(modeOf(zoomNow()) === 'building'); } });   // 건물 핀 단계에서 1초 멈추면 3D 엔진만 미리 켬 (map-3d.js)
   }
 
   /* "분석 실행" : 이때 조건을 확정 → 구 요약 · 도넛/핀 · 결과 리스트를 한 번에 다시. 이후 지도 이동 · 재검색 · 보관함 저장은 모두 이 조건 */
