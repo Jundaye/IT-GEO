@@ -120,6 +120,7 @@ window.MapPanel = (function () {
       if (!d || !d.building) { Common.toast('건물 정보를 찾을 수 없습니다.'); return; }
       current = d;
       renderInfo(d);
+      if (window.Bld3D) Bld3D.show(d);                   // 상세 패널 왼쪽 건물 3D 입체보기 (map-3d.js)
     }).fail(function () {                               // 403(관할 밖) 등 : 안내는 Common.api 가 띄운다
       $('#dTitle').text('건물 정보를 볼 수 없습니다');
       $('#btnArchive, #btnResidents').prop('disabled', true);
@@ -168,8 +169,8 @@ window.MapPanel = (function () {
     });
 
     $('#btnWhy').on('click', function () { Common.toast('기준 가이드(LLM)는 연동 예정입니다.'); });
-    $('#detailBack').on('click', function () { $('#detailView').hide(); $('#resultView').show(); });
-    $('#detailClose, #resultClose').on('click', function () { $('#panelRight').removeClass('open'); });   /* 오른쪽 패널도 지도 위에 덮으므로 resize 없음 */
+    $('#detailBack').on('click', function () { $('#detailView').hide(); $('#resultView').show(); if (window.Bld3D) Bld3D.hide(); });
+    $('#detailClose, #resultClose').on('click', function () { $('#panelRight').removeClass('open'); if (window.Bld3D) Bld3D.hide(); });   /* 오른쪽 패널도 지도 위에 덮으므로 resize 없음 */
   }
 
   return { init: init, show: show };
