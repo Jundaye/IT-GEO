@@ -32,7 +32,7 @@
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.3v.1"/></svg></span>
     <%-- 라이트/다크 (2차 A) : 다크일 때 달("라이트 모드로"), 라이트일 때 해("다크 모드로"). 누르면 테마와 아이콘이 같이 바뀐다.
          두 아이콘을 다 넣어 두고 common.css 가 <html data-theme> 에 따라 하나만 보여준다. 동작 · 저장(wf.theme)은 common.js --%>
-    <button type="button" class="icon-btn" id="btnTheme" aria-label="테마 바꾸기" data-tip="라이트 모드로">
+    <button type="button" class="icon-btn" id="btnTheme" aria-label="테마 바꾸기" data-tip="다크 모드로">
       <svg class="ico ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
       <svg class="ico ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg></button>
     <c:if test="${not empty sessionScope.loginMember}">

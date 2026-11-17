@@ -106,7 +106,7 @@ window.Common = (function () {
     .on('mouseleave focusout mousedown', '[data-tip]', hideTip);
   /* 헤더 캘린더 : 아직 빈 버튼 (나중에 "내 업무 일정" 페이지로 연결) */
   $(document).on('click', '#btnCalendar', function (e) { e.preventDefault(); });
-  /* 테마 전환 (2차 A) : <html data-theme="dark|light">, 저장 wf.theme (처음은 다크). 페이지를 열 때는 head.jspf 의 인라인 스크립트가 먼저 붙인다.
+  /* 테마 전환 (2차 A) : <html data-theme="dark|light">, 저장 wf.theme (처음은 라이트). 페이지를 열 때는 head.jspf 의 인라인 스크립트가 먼저 붙인다.
      다크일 때 달("라이트 모드로"), 라이트일 때 해("다크 모드로") : 아이콘은 CSS 가 바꾸고 여기서는 툴팁만.
      바뀌면 document 에 'wf:theme' 을 알린다 (지도 가림막 색 · 구 색칠 · 차트처럼 JS 로 색을 넣는 곳이 다시 그리도록) */
   function theme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
