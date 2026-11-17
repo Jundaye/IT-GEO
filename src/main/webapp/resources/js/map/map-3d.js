@@ -6,7 +6,9 @@
  *    실제 그리기는 마커를 누른 순간부터. 화면 열 때 바로 켜 두고 계속 그리게 하면 네이버 지도 확대가 버벅인다
  *  - 상세 패널을 닫으면 3D 그리기를 멈춘다(pause). 다시 건물을 고르면 이어서 그린다
  *  - 마커를 누르면 상자는 안 보이게(.pre : visibility hidden) 둔 채 뒤에서 미리 그리고,
- *    상세 패널의 [3D 입체보기] 버튼(#btn3d)을 눌러야 보인다. 다 그려지면 버튼이 "준비됨" 으로 바뀐다
+ *    상세 패널의 [3D 보기] 버튼(#btn3d)을 눌러야 보인다. 그리는 동안 버튼은 스피너가 도는 "3D 준비 중" 이고, 다 그려지면 "3D 보기" 로 바뀐다.
+ *    준비가 끝나기 전에 눌러 창을 열면 3D 영역에도 로딩 레이어가 덮인다 (아래 loading)
+ *  - 이 파일과 resources/vworld3d/bld3d-frame.html 은 feature/view-3D 브랜치의 것을 가져와 로딩 표시만 더했다 (2026-11-17)
  *  - 층별 색 : 거주 가구(api/map/residents.do) 의 거주 층(resFlr) · 가구 가점(priority ≥ 10 = 취약) 으로
  *      지하층 = 파랑 / 취약 가구 있는 층 = 빨강(위기가구) / 옥탑 · 고시원 = 노랑 / 가구 있음 = 회색(주거) / 자료 없음 = 흰색
  */
@@ -21,6 +23,15 @@ window.Bld3D = (function () {
   };
   var VULN_MIN = 10;     // 취약 가구 = 가구 가점 10 이상 (map-panel.js 와 같은 기준)
   var $box, frame, ready = false, queued = null, seq = 0, rotating = false, drawn = false;
+
+  /* 로딩 표시 (2026-11-17 I) : 3D 영역 전체를 덮는 반투명 레이어 + 스피너 + "3D 건물을 불러오는 중…".
+     [3D 보기] 를 누른 즉시 보이고, 다 그려지면('drawn') 사라진다. 오류가 오거나 LOAD_MS(15초)가 넘으면 "불러오지 못했습니다 · 다시 시도".
+     버튼 안의 "3D 준비 중" 스피너(btn)와는 별개 : 그건 상세가 열리자마자 돌고, 이 레이어는 준비 전에 창을 열었을 때만 보인다 */
+  var LOAD_MS = 15000, loadTimer = null, lastD = null;
+  function loading(on) { $('#b3Loading').prop('hidden', !on); if (on) $('#b3Fail').prop('hidden', true); }
+  function loadFail() { clearTimeout(loadTimer); $('#b3Loading').prop('hidden', true); $('#b3Fail').prop('hidden', false); btn('error'); }
+  function armLoad() { clearTimeout(loadTimer); loadTimer = setTimeout(function () { if (!drawn) loadFail(); }, LOAD_MS); }
+  var isOpen = function () { return !!$box && !$box.hasClass('pre'); };
 
   function parseFlr(s) {
     if (!s) return null;
@@ -98,7 +109,10 @@ window.Bld3D = (function () {
   function show(d) {
     if (!d || !d.building) return;
     var b = d.building, my = ++seq;
+    lastD = d;
     drawn = false; btn('loading');
+    loading(true);
+    if (isOpen()) armLoad(); else clearTimeout(loadTimer);   // 15초는 3D 창이 보이는 동안만 잰다
     $('#b3Sub').text((b.grndFlr != null ? '지상 ' + b.grndFlr + '층' : '') + (b.ugrndFlr ? ' · 지하 ' + b.ugrndFlr + '층' : ''));
     $('#b3Legend').html('<div class="b3-empty">층별 거주 정보를 불러오는 중…</div>');
     status(ready ? '건물 불러오는 중…' : '브이월드 3D 지도 불러오는 중…');
@@ -118,13 +132,16 @@ window.Bld3D = (function () {
   }
 
   /* 상자 상태 : 미리 그리기(.pre, 안 보임) ↔ 열림 */
-  function open() { $box.removeClass('pre').prop('hidden', false); $('#btn3d').addClass('on'); }
-  function close() { $box.addClass('pre').removeClass('big'); $('#btn3d').removeClass('on'); }
+  function open() {
+    $box.removeClass('pre').prop('hidden', false); $('#btn3d').addClass('on');
+    if (!drawn && $('#b3Fail').prop('hidden')) { loading(true); armLoad(); }   // 아직 그리는 중이면 로딩 레이어 + 15초 재기 시작
+  }
+  function close() { $box.addClass('pre').removeClass('big'); $('#btn3d').removeClass('on'); clearTimeout(loadTimer); }   // 로딩 중에 닫으면 타이머도 정리
+  /* 상세 패널의 [3D 보기] 버튼 : 상세가 열려 뒤에서 그리는 동안은 스피너가 도는 "3D 준비 중"(.loading), 다 그려지면 아이콘 + "3D 보기"(.ready).
+     스피너 · 아이콘은 building-panel.jspf 에 같이 있고 map.css 가 .loading 일 때 바꿔 보여준다 */
   function btn(st) {
-    var $b = $('#btn3d').prop('hidden', false).removeClass('loading ready');
-    if (st === 'loading') $b.addClass('loading').html('<i class="b3-spin"></i>3D 준비 중');
-    else if (st === 'ready') $b.addClass('ready').text('3D 입체보기');
-    else if (st === 'error') $b.text('3D 입체보기 (오류)');
+    $('#btn3d').prop('hidden', false).removeClass('loading ready error').addClass(st || '');
+    $('#btn3dTxt').text(st === 'loading' ? '3D 준비 중' : '3D 보기');
   }
   var warmTimer = null;
   function warmup(inBuildingZoom) {
@@ -132,7 +149,7 @@ window.Bld3D = (function () {
     if (frame || !inBuildingZoom || !$box) return;
     warmTimer = setTimeout(function () { whenStill(ensureFrame); }, 1000);
   }
-  function hide() { seq++; drawn = false; if ($box) close(); $('#btn3d').prop('hidden', true); if (ready) { send({ type: 'clear' }); send({ type: 'pause' }); } }
+  function hide() { seq++; drawn = false; clearTimeout(loadTimer); if ($box) close(); $('#btn3d').prop('hidden', true); if (ready) { send({ type: 'clear' }); send({ type: 'pause' }); } }
 
   function init() {
     $box = $('#bld3d');
@@ -142,14 +159,16 @@ window.Bld3D = (function () {
       var m = e.data;
       if (m.type === 'ready') { ready = true; if (queued) { var q = queued; queued = null; send(q); } }
       else if (m.type === 'status') status(m.text);
-      else if (m.type === 'error') { status(m.text, true); btn('error'); }
+      else if (m.type === 'error') { status(m.text, true); loadFail(); }
       else if (m.type === 'drawn') {
         status(''); drawn = true; btn('ready');
+        clearTimeout(loadTimer); loading(false); $('#b3Fail').prop('hidden', true);
         $('#b3Note').text((m.measured ? '실측 높이 ' : '추정 높이 ') + m.height + 'm · 층당 ' + m.floorH + 'm'
           + (m.footprint ? '' : ' · 외곽선 자료 없음(사각형으로 표시)'));
       }
     });
     $('#b3Close').on('click', close);
+    $('#b3Retry').on('click', function () { if (lastD) { show(lastD); armLoad(); } });   // 다시 시도 = 같은 건물로 처음부터
     $('#btn3d').on('click', function () { if ($box.hasClass('pre')) open(); else close(); });
     $box.addClass('pre').prop('hidden', false);   // 투명 상태로만 둔다. iframe 은 첫 마커 클릭 때 불러온다
     $('#b3Expand').on('click', function () { $box.toggleClass('big'); });

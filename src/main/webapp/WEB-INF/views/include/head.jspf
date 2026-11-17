@@ -5,6 +5,8 @@
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <head>
   <meta charset="UTF-8">
+  <%-- 테마 (2차 A) : CSS 를 읽기 전에 <html data-theme> 를 먼저 붙여 다크가 잠깐 비치지 않게 한다. 저장값 wf.theme, 처음은 다크 --%>
+  <script>(function () { var t = 'dark'; try { if (localStorage.getItem('wf.theme') === 'light') t = 'light'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="ctx" content="${pageContext.request.contextPath}/">
   <title><c:out value="${pageTitle}"/> | WellFAIR</title>

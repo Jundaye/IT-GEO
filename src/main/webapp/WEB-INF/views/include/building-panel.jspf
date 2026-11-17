@@ -10,30 +10,31 @@
 </div>
 
 <div class="d-title-wrap">
-  <div class="d-title-row"><h3 id="dTitle"></h3><span class="d-checked" id="dChecked" style="display:none"></span></div>
-  <%-- 조사 이력 보기 → 05 건물 확인 이력 (새 탭 : 지도 분석 상태를 그대로 두려고). 현장 방문 기록(visitCnt)이 있을 때만 보인다 (map-panel.js) --%>
-  <div class="d-sub"><span id="dAddr"></span><a class="btn btn-light d-hist" id="dHistory" href="#" target="_blank" rel="noopener" style="display:none">조사 이력 보기</a><button type="button" class="btn btn-line btn-sm d-3d" id="btn3d" hidden>3D 입체보기</button></div>
+  <%-- 3D 보기 : 3D 는 지도 툴바가 아니라 여기서만 연다 (map-3d.js).
+       상세가 열리면 뒤에서 3D 를 미리 그리는데, 그동안 버튼은 스피너 + "3D 준비 중"(.loading), 다 그려지면 아이콘 + "3D 보기" --%>
+  <div class="d-title-row"><h3 id="dTitle"></h3><span class="d-checked" id="dChecked" style="display:none"></span>
+    <button type="button" class="btn btn-line d-3d" id="btn3d"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg><i class="b3-spin"></i><span id="btn3dTxt">3D 보기</span></button>
+  </div>
+  <div class="d-sub"><span id="dAddr"></span></div>
 </div>
 
 <div class="d-body">
-  <h4>점수 구성</h4>
+  <%-- 점수 구성 (2차 K) : 묶음 줄을 누르면 요인별 표가 펼쳐진다. 그리기는 map-panel.js scoreRow --%>
+  <h4>점수 구성 <span class="sc-total" id="dScoreTotal"></span></h4>
   <div class="sc-list" id="dScoreItems"></div>
 
   <h4>건물 정보 (건축물대장)</h4>
   <table class="d-info"><tbody id="dInfo"></tbody></table>
 
-  <%-- 복지 사각 : 가장 가까운 복지시설 · 병원 · 정류장까지 거리 (건축물대장 자료가 아니라 따로 뺐다) --%>
-  <h4>복지 사각</h4>
+  <%-- 시설까지의 거리 : 가장 가까운 복지시설 · 병원 · 정류장까지 거리 (건축물대장 자료가 아니라 따로 뺐다) --%>
+  <h4>시설까지의 거리</h4>
   <div class="welf-box" id="dWelf"></div>
 
   <%-- 거주 취약 가구 (02-2) : 집계만. 개인 정보는 모달에서 --%>
   <h4>거주 취약 가구</h4>
   <div class="vuln-box">
-    <div>
-      <b id="dVulnCnt">취약 가구 0세대</b>
-      <span id="dVulnTypes" class="muted"></span>
-    </div>
-    <button type="button" class="btn btn-line btn-sm" id="btnResidents">🔒 개인 정보 보기</button>
+    <div class="vuln-line" id="dVulnLine"><b id="dVulnCnt">취약 가구 0세대</b><span id="dVulnTypes"></span></div>
+    <button type="button" class="btn btn-line btn-sm" id="btnResidents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9.5" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>개인 정보 보기</button>
   </div>
 
   <h4>담당자 메모 <small class="d-hint">저장은 연동 예정</small></h4>
@@ -42,7 +43,8 @@
 
 <div class="d-foot">
   <button type="button" class="btn btn-primary" id="btnArchive">보관함에 저장</button>
-  <button type="button" class="btn btn-line" id="btnWhy">이 기준은 왜?</button>
+  <%-- 조사 이력 보기 → 05 건물 확인 이력 (새 탭 : 지도 분석 상태를 그대로 두려고). 현장 방문 기록(visitCnt)이 없으면 막아 둔다 (map-panel.js) --%>
+  <a class="btn btn-line disabled" id="dHistory" target="_blank" rel="noopener" aria-disabled="true">조사 이력 보기</a>
 </div>
 
 <%-- 취약 가구 정보 모달 (02-2-1) : 순위·가점(툴팁 = 내역), 이름은 성만, 층수·연령대·가구 구성·취약 유형·복지 연계. 순서 = 서버의 "가장 취약한 순" (12단계) --%>
@@ -53,9 +55,11 @@
       <button type="button" class="rp-close" id="rmClose">×</button>
     </div>
     <div class="modal-body">
-      <div class="rm-notice"><span>🔒 개인정보 열람 기록이 남아요 · <span id="rmViewer"></span></span><span class="muted">업무 목적 외 사용 금지</span></div>
+      <div class="rm-notice"><span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9.5" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>개인정보 열람 기록이 남아요 · <span id="rmViewer"></span></span><span class="muted">업무 목적 외 사용 금지</span></div>
       <p class="rm-legend muted">취약 유형 = 가구원 전체 요인 · <span class="tag benefit">점선</span> = 수급 확인용(기초생활·차상위·기초연금) · 복지 연계 = 행복e음 지원연계 → 처리결과 원본 값</p>
+      <%-- 열 폭 고정 (2차 M) : 순위 · 층수(지시문은 56px 인데 "지하층" 이 잘려서 76px) · 세대주 · 연령대 · 가구 구성 · 취약 유형(나머지 전부) · 복지 연계. 짧은 칸은 한 줄, 취약 유형만 칩 단위로 줄바꿈 --%>
       <table class="rm-tbl">
+        <colgroup><col style="width:76px"><col style="width:76px"><col style="width:68px"><col style="width:64px"><col style="width:124px"><col><col style="width:150px"></colgroup>
         <thead><tr><th>순위</th><th>층수</th><th>세대주</th><th>연령대</th><th>가구 구성</th><th>취약 유형</th><th>복지 연계</th></tr></thead>
         <tbody id="rmRows"></tbody>
       </table>

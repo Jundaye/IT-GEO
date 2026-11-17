@@ -1,6 +1,6 @@
 /*
  * 오른쪽 "건물 상세 정보" 패널 (include/building-panel.jspf, Figma 02-2)
- *  - 점수 구성 · 건축물대장 · 복지 사각(가까운 시설 거리) · 거주 취약 가구(집계) · 메모 · 보관함 저장
+ *  - 점수 구성 · 건축물대장 · 시설까지의 거리(가까운 시설) · 거주 취약 가구(집계) · 메모 · 보관함 저장
  *  - [개인 정보 보기] → 취약 가구 정보 모달 (Figma 02-2-1) : 순위·가점(툴팁 = 내역) · 성만 보이는 세대주 · 층수 · 연령대 · 가구 구성 · 취약 유형 · 복지 연계
  *      순서는 서버(mapper-resident getResidentList)가 정한 "가장 취약한 순" 그대로. 여기서 다시 정렬하지 않는다 (12단계)
  *  - [보관함에 저장] (13단계) : 안 담김 "보관함에 저장" / 담겼고 조사 전 "보관함에 저장됨"(누르면 안내 + 보관함에서 보기) / 조사 이력 있음 "다시 저장 (점수 갱신)"
@@ -11,8 +11,25 @@ window.MapPanel = (function () {
   var current = null;        // BuildingDetailTO
 
   /* 묶음 한 줄 (피그마 02-2) : "주거 공간 (반지하 · 옥탑)" · 막대 · "+45". 막대 = 받은 점수 ÷ 가장 큰 묶음 가중치 */
-  function scoreRow(it, maxW) {
+  /* 2차(11-17 K) 펼침형 : [꺾쇠] 묶음 이름 · 요약 · 막대 · +점수. 묶음 줄을 누르면 아래에 요인별 표 (요인 | 이 건물 | 기준 | 충족).
+     서버가 factors 를 주지 않으면(옛 응답 등) 예전처럼 desc 를 괄호로 붙인 한 줄로 그린다 */
+  var CHEV = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  var CHECK = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function scoreRow(it, maxW, open) {
     var w = maxW ? Math.round(Math.min(it.points, maxW) / maxW * 100) : 0;
+    if (it.factors && it.factors.length) {
+      var rows = it.factors.map(function (f) {
+        var cls = !f.on ? 'off' : f.hit ? '' : 'miss';
+        return '<tr class="' + cls + '"><td>' + esc(f.name) + '</td><td>' + esc(f.value) + '</td><td>' + esc(f.criterion) + '</td>'
+          + '<td class="c">' + (!f.on ? '제외' : f.hit ? CHECK : '–') + '</td></tr>';
+      }).join('');
+      return '<div class="sc-item' + (open ? ' open' : '') + (it.hit ? '' : ' miss') + '">'
+        + '<button type="button" class="sc-head" aria-expanded="' + !!open + '" title="가중치 ' + it.weight + '">' + CHEV
+        + '<span class="sc-label">' + esc(it.label) + '</span><span class="sc-sum">' + esc(it.summary || '') + '</span>'
+        + '<span class="sc-bar"><i style="width:' + w + '%"></i></span>'
+        + '<b class="sc-pt">' + (it.hit ? '+' + it.points : (it.weight ? '0' : '-')) + '</b></button>'
+        + '<table class="sc-detail"><thead><tr><th>요인</th><th>이 건물</th><th>기준</th><th class="c">충족</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    }
     return '<div class="sc-row' + (it.hit ? '' : ' miss') + '" title="가중치 ' + it.weight + ' · ' + esc(it.desc) + '">'
       + '<span class="sc-label">' + esc(it.label) + ' <small>(' + esc(it.desc) + ')</small></span>'
       + '<span class="sc-bar"><i style="width:' + w + '%"></i></span>'
@@ -30,6 +47,12 @@ window.MapPanel = (function () {
     return b.bldNm ? Common.shortAddr(b.addr) + ' ' + b.bldNm : Common.shortAddr(b.addr) + (b.useNm ? ' ' + b.useNm : '');
   }
 
+  /* 아래 [조사 이력 보기] : 현장 방문 기록이 있으면 05 건물 확인 이력으로 가는 링크, 없으면 막아 둔다 */
+  function setHistory(href) {
+    var $h = $('#dHistory').toggleClass('disabled', !href).attr('aria-disabled', String(!href)).attr('title', href ? '' : '아직 현장 조사 기록이 없습니다');
+    if (href) $h.attr('href', href); else $h.removeAttr('href');
+  }
+
   function renderInfo(d) {
     var b = d.building;
     $('#dTitle').text(titleOf(b));
@@ -37,9 +60,11 @@ window.MapPanel = (function () {
     $('#dScore').text(b.score + '점');
     $('#dChecked').toggle(!!b.checkedAt).text('현장 확인됨 ' + (b.checkedAt || '').slice(5));
     /* 조사 이력 보기 : 현장 방문 기록이 있을 때만 */
-    $('#dHistory').attr('href', Common.url('archivedetail.do?bldId=' + encodeURIComponent(String(b.bldId)))).toggle(b.visitCnt > 0);
+    setHistory(b.visitCnt > 0 ? Common.url('archivedetail.do?bldId=' + encodeURIComponent(String(b.bldId))) : null);
     var maxW = d.scoreItems.reduce(function (m, it) { return Math.max(m, it.weight || 0); }, 0);
-    $('#dScoreItems').html(d.scoreItems.map(function (it) { return scoreRow(it, maxW); }).join(''));
+    /* 처음에는 모두 접어 둔다. 묶음 줄을 눌러야 요인별 표가 펼쳐진다 */
+    $('#dScoreItems').html(d.scoreItems.map(function (it) { return scoreRow(it, maxW, false); }).join(''));
+    $('#dScoreTotal').html('합계 <b>' + b.score + '</b>점');
 
     var floors = (b.grndFlr != null ? '지상 ' + b.grndFlr + '층' : '') + (b.ugrndFlr ? ' / 지하 ' + b.ugrndFlr + '층' : '');
     if (b.ugrndUnits > 0) floors += (floors ? ' · ' : '') + '지하 전유 ' + b.ugrndUnits + '호';   // 공동주택 전유부 기준 (점수와 무관)
@@ -51,13 +76,16 @@ window.MapPanel = (function () {
       + infoRow('위반건축물', b.violYn === '1' ? '해당' : b.violYn === '0' ? '없음' : '대장 미연계')
       + infoRow('세대수', b.units != null ? b.units + '세대' : '-')
     );
-    /* 복지 사각 : 가장 가까운 시설까지 거리 */
+    /* 시설까지의 거리 : 가장 가까운 시설까지 거리 */
     $('#dWelf').html(welfRow('복지시설', b.welfNm, b.welfDist) + welfRow('병원', b.hospNm, b.hospDist) + welfRow('정류장', b.busNm, b.busDist));
 
     /* 거주 취약 가구 (02-2) : 세대 수 + 많은 유형 3개 */
     var rc = d.residents || {};
-    $('#dVulnCnt').html('취약 가구 ' + (rc.vulnHh || 0) + '세대' + (rc.hhCnt ? ' <small>· 전체 ' + rc.hhCnt + '가구 ' + rc.mbrCnt + '명</small>' : ''));
-    $('#dVulnTypes').text(rc.vulnTypes || (rc.hhCnt ? '취약 유형 없음' : '거주 가구 자료 없음'));
+    /* 한 줄 (2026-11-17) : "취약 가구 3세대 · 75세 이상 2 · 심한 장애 1 · …" 넘치면 … 로 줄고, 전체 문장은 title 로 */
+    var types = rc.vulnLine || rc.vulnTypes || (rc.hhCnt ? '취약 유형 없음' : '거주 가구 자료 없음');
+    $('#dVulnCnt').text('취약 가구 ' + (rc.vulnHh || 0) + '세대');
+    $('#dVulnTypes').text(' · ' + types);
+    $('#dVulnLine').attr('title', '취약 가구 ' + (rc.vulnHh || 0) + '세대 · ' + types + (rc.hhCnt ? ' (전체 ' + rc.hhCnt + '가구 ' + rc.mbrCnt + '명)' : ''));
     $('#btnResidents').prop('disabled', !rc.hhCnt);
     $('#dMemo').val('');
     $('#btnArchive').prop('disabled', false).text(archiveLabel(b));
@@ -90,9 +118,11 @@ window.MapPanel = (function () {
     var tags = (r.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('')
       + (r.benefits || []).map(function (t) { return '<span class="tag benefit" title="수급 확인용 (이미 복지 체계 안)">' + esc(t) + '</span>'; }).join('');
     return '<tr><td class="rm-rank"><b>' + (i + 1) + '</b><small title="' + esc(r.priorityText || '') + '">' + r.priority + '점</small></td>'
-      + '<td class="rm-flr">' + esc(r.resFlr || '-') + '</td><td>' + esc(r.headNm) + '</td><td>' + ageBand(r.maxAge) + '</td>'
-      + '<td>' + esc(household(r)) + '</td><td>' + (tags || '<span class="muted">-</span>') + '</td>'
-      + '<td><i class="rm-dot ' + w.c + '"></i>' + esc(w.t) + '</td></tr>';
+      + '<td class="rm-flr" title="' + esc(r.resFlr || '') + '">' + esc(r.resFlr || '-') + '</td><td>' + esc(r.headNm) + '</td><td>' + ageBand(r.maxAge) + '</td>'
+      /* 가구 구성 · 복지 연계는 넘치면 … 로 끝나므로 전체 값을 title 로. 취약 유형 칸만 칩 단위로 줄바꿈 (2차 M) */
+      + '<td title="' + esc(household(r)) + '">' + esc(household(r)) + '</td>'
+      + '<td class="rm-tagcell">' + (tags ? '<div class="rm-tags">' + tags + '</div>' : '<span class="muted">-</span>') + '</td>'
+      + '<td title="' + esc(w.t) + '"><i class="rm-dot ' + w.c + '"></i>' + esc(w.t) + '</td></tr>';
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function openResidents() {
@@ -115,12 +145,12 @@ window.MapPanel = (function () {
     current = null;
     $('#panelRight').addClass('open');
     $('#resultView').hide(); $('#detailView').show();
-    $('#dTitle').text('불러오는 중…'); $('#dAddr').text(''); $('#dHistory').hide(); $('#dScoreItems, #dInfo, #dWelf').empty();
+    $('#dTitle').text('불러오는 중…'); $('#dAddr').text(''); setHistory(null); $('#dScoreItems, #dInfo, #dWelf').empty();
     MapApi.building($.extend({}, getCriteria(), { bldId: bldId })).done(function (d) {
       if (!d || !d.building) { Common.toast('건물 정보를 찾을 수 없습니다.'); return; }
       current = d;
       renderInfo(d);
-      if (window.Bld3D) Bld3D.show(d);                   // 상세 패널 왼쪽 건물 3D 입체보기 (map-3d.js)
+      if (window.Bld3D) Bld3D.show(d);                   // 상세 패널 왼쪽 건물 3D 입체보기 : 안 보이는 채로 미리 그린다 (map-3d.js)
     }).fail(function () {                               // 403(관할 밖) 등 : 안내는 Common.api 가 띄운다
       $('#dTitle').text('건물 정보를 볼 수 없습니다');
       $('#btnArchive, #btnResidents').prop('disabled', true);
@@ -130,6 +160,16 @@ window.MapPanel = (function () {
   function init(opts) {
     getCriteria = opts.getCriteria;
     onArchived = opts.onArchived;
+
+    /* 취약 가구 모달을 오른쪽 패널 밖(body 맨 끝)으로 옮긴다 (2차 Q). 패널이 transform · z-index 로 자기만의 겹침 영역을 만들어서,
+       패널 안에 두면 패널 밖의 여닫기 버튼이 모달 위로 올라온다. 이벤트는 id 로 걸려 있어 그대로 동작한다 */
+    $('#resModal').appendTo('body');
+
+    /* 점수 구성 : 묶음 줄을 누르면 요인별 표를 펼치고 접는다 (여러 개를 같이 펼칠 수 있다) */
+    $('#dScoreItems').on('click', '.sc-head', function () {
+      var open = $(this).closest('.sc-item').toggleClass('open').hasClass('open');
+      $(this).attr('aria-expanded', String(open));
+    });
 
     $('#btnResidents').on('click', openResidents);
     $('#rmClose, #rmClose2').on('click', closeResidents);
@@ -168,10 +208,19 @@ window.MapPanel = (function () {
       }).always(function () { $b.prop('disabled', false); });
     });
 
-    $('#btnWhy').on('click', function () { Common.toast('기준 가이드(LLM)는 연동 예정입니다.'); });
+    /* 오른쪽 패널 폭 : 왼쪽 끝 손잡이를 끌면 360~640px (기본 400), wf.rpW 에 기억 */
+    Common.resizer({ handle: '#rpGrip', cssVar: '--rp-w', key: 'wf.rpW', min: 360, max: 640, def: 400, sign: -1 });
+
+    /* 3D 보기 (#btn3d) : 클릭 · 로딩 표시는 map-3d.js (Bld3D) 가 맡는다. 목록으로 돌아가거나 패널을 닫으면 3D 도 닫는다 */
+    $('#dHistory').on('click', function (e) { if ($(this).hasClass('disabled')) e.preventDefault(); });
     $('#detailBack').on('click', function () { $('#detailView').hide(); $('#resultView').show(); if (window.Bld3D) Bld3D.hide(); });
     $('#detailClose, #resultClose').on('click', function () { $('#panelRight').removeClass('open'); if (window.Bld3D) Bld3D.hide(); });   /* 오른쪽 패널도 지도 위에 덮으므로 resize 없음 */
   }
 
-  return { init: init, show: show };
+  /* 여닫기 버튼으로 패널을 다시 열었을 때 : 보던 건물 상세가 있으면 3D 를 다시 준비한다 (닫을 때 Bld3D.hide 로 정리했으므로) */
+  function refresh3d() {
+    if (current && window.Bld3D && $('#detailView').is(':visible')) Bld3D.show(current);
+  }
+
+  return { init: init, show: show, refresh3d: refresh3d };
 })();

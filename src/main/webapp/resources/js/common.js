@@ -90,5 +90,76 @@ window.Common = (function () {
 
   function num(n) { return Number(n || 0).toLocaleString(); }
 
-  return { ctx: CTX, esc: esc, url: url, api: api, toast: toast, dialog: dialog, shortAddr: shortAddr, num: num };
+  /* ---------- 공통 툴팁 : data-tip 속성이 있는 요소 아래 8px 에 말풍선 (모양 = common.css .tip) ---------- */
+  var $tip = null;
+  function showTip(el) {
+    var t = el.getAttribute('data-tip');
+    if (!t) return;
+    if (!$tip) $tip = $('<div class="tip" role="tooltip"></div>').appendTo('body');
+    $tip.text(t);
+    var r = el.getBoundingClientRect(), w = $tip.outerWidth(), cx = r.left + r.width / 2;
+    var left = Math.max(8, Math.min(cx - w / 2, window.innerWidth - w - 8));   // 화면 오른쪽 끝을 넘으면 왼쪽으로
+    $tip.css({ left: left + 'px', top: (r.bottom + 8) + 'px' }).css('--tail', Math.max(10, Math.min(w - 10, cx - left)) + 'px').addClass('show');
+  }
+  function hideTip() { if ($tip) $tip.removeClass('show'); }
+  $(document).on('mouseenter focusin', '[data-tip]', function () { showTip(this); })
+    .on('mouseleave focusout mousedown', '[data-tip]', hideTip);
+  /* 헤더 캘린더 : 아직 빈 버튼 (나중에 "내 업무 일정" 페이지로 연결) */
+  $(document).on('click', '#btnCalendar', function (e) { e.preventDefault(); });
+  /* 테마 전환 (2차 A) : <html data-theme="dark|light">, 저장 wf.theme (처음은 다크). 페이지를 열 때는 head.jspf 의 인라인 스크립트가 먼저 붙인다.
+     다크일 때 달("라이트 모드로"), 라이트일 때 해("다크 모드로") : 아이콘은 CSS 가 바꾸고 여기서는 툴팁만.
+     바뀌면 document 에 'wf:theme' 을 알린다 (지도 가림막 색 · 구 색칠 · 차트처럼 JS 로 색을 넣는 곳이 다시 그리도록) */
+  function theme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+  function syncThemeBtn() { $('#btnTheme').attr('data-tip', theme() === 'light' ? '다크 모드로' : '라이트 모드로'); }
+  $(document).on('click', '#btnTheme', function () {
+    var t = theme() === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('wf.theme', t); } catch (e) {}
+    syncThemeBtn(); hideTip();
+    $(document).trigger('wf:theme', [t]);
+  });
+  $(syncThemeBtn);
+
+  /**
+   * 패널 폭 끌어서 조절. 폭은 :root 의 CSS 변수로 관리하고 localStorage 에 기억한다.
+   *   Common.resizer({ handle: '#lpGrip', cssVar: '--lp-w', key: 'wf.lpW', min: 260, max: 480, def: 300, sign: 1 })
+   *   sign = 1 : 오른쪽으로 끌면 넓어짐 (왼쪽 패널) / -1 : 왼쪽으로 끌면 넓어짐 (오른쪽 패널)
+   */
+  var SNAP_PX = 16;   // 기본 폭에 달라붙는 거리 (px)
+  function resizer(opt) {
+    var root = document.documentElement, $body = $('body');
+    function set(w) {
+      w = Math.max(opt.min, Math.min(opt.max, Math.round(w)));
+      root.style.setProperty(opt.cssVar, w + 'px');
+      return w;
+    }
+    try {                                                   // 지난번 폭 복원 (움직이는 효과 없이)
+      var saved = Number(localStorage.getItem(opt.key));
+      if (saved) { $body.addClass('resizing'); set(saved); setTimeout(function () { $body.removeClass('resizing'); }, 50); }
+    } catch (e) {}
+    $(opt.handle).on('mousedown', function (e) {
+      if (e.button !== 0 || (e.target.closest && e.target.closest('.side-toggle'))) return;   // 여닫기 버튼에서는 크기조정을 시작하지 않는다
+      e.preventDefault();
+      var x0 = e.clientX, w0 = parseFloat(getComputedStyle(root).getPropertyValue(opt.cssVar)) || opt.def, w = w0;
+      var $h = $(this);
+      $body.addClass('resizing dragging');                  // 끄는 동안 transition 끔 (common.css)
+      $(document).on('mousemove.rz', function (ev) {
+        /* 기본 폭 자석 : 커서 기준 폭이 기본 폭 ±SNAP_PX 안이면 기본 폭에 딱 붙이고(점선 가이드 .snap), 벗어나면 다시 커서를 따라간다. 늘릴 때 · 줄일 때 같다 */
+        var raw = w0 + (ev.clientX - x0) * opt.sign, snap = Math.abs(raw - opt.def) <= SNAP_PX;
+        w = set(snap ? opt.def : raw);
+        $h.toggleClass('snap', snap);
+      })
+        .on('mouseup.rz', function () {
+          $(document).off('.rz');
+          $h.removeClass('snap');
+          $body.removeClass('resizing dragging');
+          try { localStorage.setItem(opt.key, String(w)); } catch (err) {}
+        });
+    }).on('dblclick', function () {                         // 두 번 누르면 기본 폭
+      set(opt.def);
+      try { localStorage.removeItem(opt.key); } catch (err) {}
+    });
+  }
+
+  return { ctx: CTX, esc: esc, url: url, api: api, toast: toast, dialog: dialog, shortAddr: shortAddr, num: num, resizer: resizer, theme: theme };
 })();

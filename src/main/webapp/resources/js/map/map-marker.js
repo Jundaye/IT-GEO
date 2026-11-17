@@ -208,9 +208,12 @@ window.MapMarker = (function () {
 		if (window.GU_BOUNDARY && GU_BOUNDARY[g.sggCd]) g.ring = GU_BOUNDARY[g.sggCd];
       if (!g.ring || g.ring.length < 3) return;
       var col = colBy[g.sggCd];
+      /* 라이트 테마 : 밝은 지도 위라 테두리 · 채움을 한 단계 진하게 (MAP_CONFIG.GU_LIGHT). 다크는 지금 값 그대로 */
+      var lt = null;
+      if (Common.theme() === 'light') Object.keys(C.GU_LIGHT || {}).forEach(function (k) { if (C.COLORS[k] === col) lt = C.GU_LIGHT[k]; });
       var polygon = new naver.maps.Polygon({
         paths: g.ring.map(function (p) { return LL(p[1], p[0]); }),
-        strokeColor: col, strokeWeight: 4, strokeOpacity: 1, fillColor: col, fillOpacity: 0.4, zIndex: 1, clickable: true
+        strokeColor: lt ? lt.stroke : col, strokeWeight: 4, strokeOpacity: 1, fillColor: lt ? lt.fill : col, fillOpacity: lt ? lt.op : 0.4, zIndex: 1, clickable: true
       });
       var el = document.createElement('div');
       el.className = 'mk-inv kgu';

@@ -71,7 +71,7 @@
 .tbl .addr { font-size: 12px; color: var(--text-2); margin-top: 2px; }
 .tbl input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; }
 .score-bar { display: inline-flex; align-items: center; gap: 10px; }
-.score-bar i { display: block; width: 90px; height: 4px; background: #303033; border-radius: 2px; overflow: hidden; }
+.score-bar i { display: block; width: 90px; height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
 .score-bar i b { display: block; height: 100%; background: var(--lv, var(--primary)); }
 .score-bar span { font-size: 15px; font-weight: 700; min-width: 24px; color: var(--lv, inherit); }
 /* 점수 구간 색 = 지도 핀 색 (map-config.js COLORS) */
@@ -119,8 +119,8 @@
 .fl-card { background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 11px; }
 .fl-card { transition: border-color .12s, background-color .12s; }
 .fl-row { cursor: pointer; }
-.fl-card:not(.open):hover { background: var(--bg-hover); border-color: #4a4a52; }
-.fl-card.open { border-color: var(--primary); background: #17191c; }
+.fl-card:not(.open):hover { background: var(--bg-hover); border-color: var(--text-3); }
+.fl-card.open { border-color: var(--primary); background: var(--bg-card); }
 .fl-body-foot { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .fl-del { background: none; border: 0; padding: 4px 2px; font-size: 12px; color: var(--text-2); cursor: pointer; }
 .fl-del:hover:not(:disabled) { color: var(--danger); text-decoration: underline; }
@@ -131,7 +131,7 @@
 .fl-row .s { margin-top: 4px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
 .fl-row .n { font-size: 16px; font-weight: 700; }
 .prog { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-.prog i { display: block; width: 110px; height: 4px; background: #2f2f32; border-radius: 2px; overflow: hidden; }
+.prog i { display: block; width: 110px; height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
 .prog i b { display: block; height: 100%; background: var(--primary); }
 .fl-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 /* 펼침/접힘 화살표 : 글자(⌄)는 글꼴 기준선 때문에 뒤집으면 위아래로 움직여서 CSS 로 그린다.
@@ -192,8 +192,9 @@
 .map-float.br small { display: block; font-size: 11px; color: var(--text-2); }
 .lg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--primary); vertical-align: -1px; margin-right: 4px; }
 .lg-dot.fill { background: var(--primary); }
-.nmap > div:not(.map-error) { filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(92%); }
-.mk-inv { filter: invert(100%) hue-rotate(180deg) brightness(114%) contrast(108%); }
+/* 타일 반전은 다크일 때만 (2차 A-4). 라이트는 네이버 기본 지도 그대로 */
+:where(:root:not([data-theme="light"])) .nmap > div:not(.map-error) { filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(92%); }
+:where(:root:not([data-theme="light"])) .mk-inv { filter: invert(100%) hue-rotate(180deg) brightness(114%) contrast(108%); }
 .num-pin { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.6); cursor: pointer; }
 .num-pin.done { background: var(--bg-panel); color: var(--text-2); }
 .hollow-pin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; background: rgba(20,20,22,.7); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.6); }
@@ -211,7 +212,7 @@
 .route-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
 .route-modes div { height: 65px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; color: var(--text-2); cursor: pointer; }
 .route-modes div:hover { border-color: var(--primary); }
-.route-modes div.on { border-color: var(--primary); background: rgba(68,142,222,.12); }
+.route-modes div.on { border-color: var(--primary); background: var(--primary-tint); }
 .route-modes b { display: block; font-size: 16px; color: var(--text); margin-top: 6px; }
 .route-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; font-size: 12px; color: var(--text-2); }
 .route-stats b { display: block; font-size: 13px; color: var(--text); margin-top: 2px; }
@@ -339,7 +340,7 @@
 .dash-page .kpi .k-val { font-size: 36px; line-height: 44px; margin: 12px 0 10px; }
 .dash-page .kpi .k-val small { font-size: 15px; }
 .dash-head { margin-bottom: 22px; }
-.flash { margin-bottom: 12px; padding: 10px 14px; background: rgba(68,142,222,.12); border: 1px solid var(--primary); border-radius: var(--radius); font-size: 13px; }
+.flash { margin-bottom: 12px; padding: 10px 14px; background: var(--primary-tint); border: 1px solid var(--primary); border-radius: var(--radius); font-size: 13px; }
 
 /* 03-1 피그마 맞춤 : 카드 머리띠 44px · 행 35px / 32px */
 .fe-grid > .card { padding: 0; overflow: hidden; }

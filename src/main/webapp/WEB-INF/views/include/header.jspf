@@ -17,16 +17,34 @@
     <a href="${ctx}/dashboard.do" class="${activeMenu == 'dashboard' ? 'active' : ''}">대시보드</a>
   </nav>
   <div class="header-right">
+    <%-- 2026-11-17 : 데이터 업데이트 → 캘린더 → ? → 부서 · 이름 → 로그아웃.
+         아이콘은 흑백 선 SVG(.ico, 글자색을 따라감), 툴팁은 data-tip (common.js). --%>
+    <%-- 데이터 업데이트 : 서울시청 계정만 (매일 쓰는 화면이 아니라 탭에는 넣지 않는다) --%>
+    <c:if test="${not empty sessionScope.loginMember and not sessionScope.loginMember.guUser}">
+      <%-- 2차(11-17) : 페이지 이동 대신 모달 (include/dataupdate-modal.jspf · js/dataupdate-modal.js). 실행 중에 닫으면 글자가 "데이터 업데이트 46%" 로 바뀌고 아래에 진행 막대(.du-hbar) --%>
+      <button type="button" class="btn btn-line btn-sm du-open" id="btnDataUpdate" data-tip="원천 파일이 바뀌었으면 건물 데이터를 다시 계산합니다.">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.4L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.4l1.7-1.9"/><path d="M20 20v-4.5h-4.5"/></svg><span id="duBtnText">데이터 업데이트</span><i class="du-hbar" id="duHbar"></i></button>
+    </c:if>
+    <%-- 캘린더 : 빈 버튼. 나중에 "내 업무 일정" 페이지로 연결 (클릭은 common.js 가 막는다) --%>
+    <a href="#" class="icon-btn" id="btnCalendar" aria-label="내 업무 일정" data-tip="내 업무 일정 (준비 중)">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="1"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></a>
+    <span class="icon-btn" id="btnHelp" tabindex="0" aria-label="도움말" data-tip="위험요인을 고르고 '분석 실행'을 누르면 지금 보이는 지도 범위에서 찾아줍니다.">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.3v.1"/></svg></span>
+    <%-- 라이트/다크 (2차 A) : 다크일 때 달("라이트 모드로"), 라이트일 때 해("다크 모드로"). 누르면 테마와 아이콘이 같이 바뀐다.
+         두 아이콘을 다 넣어 두고 common.css 가 <html data-theme> 에 따라 하나만 보여준다. 동작 · 저장(wf.theme)은 common.js --%>
+    <button type="button" class="icon-btn" id="btnTheme" aria-label="테마 바꾸기" data-tip="라이트 모드로">
+      <svg class="ico ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+      <svg class="ico ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg></button>
     <c:if test="${not empty sessionScope.loginMember}">
       <span class="user-info">
         <c:out value="${sessionScope.loginMember.deptNm}"/> ·
         <c:out value="${sessionScope.loginMember.userNm}"/> <c:out value="${sessionScope.loginMember.rankNm}"/>
       </span>
     </c:if>
-    <%-- 데이터 업데이트 : 서울시청 계정만 (매일 쓰는 화면이 아니라 탭에는 넣지 않는다) --%>
-    <c:if test="${not empty sessionScope.loginMember and not sessionScope.loginMember.guUser}">
-      <a href="${ctx}/dataupdate.do" class="btn btn-line btn-sm ${activeMenu == 'dataupdate' ? 'active' : ''}">데이터 업데이트</a>
-    </c:if>
     <a href="${ctx}/logout.do" class="btn btn-line btn-sm">로그아웃</a>
   </div>
 </header>
+<%-- 데이터 업데이트 모달 : 헤더를 쓰는 모든 화면에서 열린다 (서울시청 계정만) --%>
+<c:if test="${not empty sessionScope.loginMember and not sessionScope.loginMember.guUser}">
+  <%@ include file="/WEB-INF/views/include/dataupdate-modal.jspf" %>
+</c:if>

@@ -11,7 +11,7 @@ window.MapLayer = (function () {
   var C = window.MAP_CONFIG;
   var STEP = C.WEIGHT_STEP || 5;
   var weights = {};      // 묶음 key → 값 (합 100)
-  var onRun = null, onToggle = null;
+  var onRun = null, onToggle = null, onChange = null;
 
   function factorOf(key) {
     for (var i = 0; i < C.FACTORS.length; i++) if (C.FACTORS[i].key === key) return C.FACTORS[i];
@@ -106,11 +106,55 @@ window.MapLayer = (function () {
     return p;
   }
 
-  function dirty() { $('#btnRun').addClass('dirty'); }
+  /* 사용자가 패널에서 체크 · 기준값 · 가중치를 직접 바꿨다 → [분석 실행] 에 "변경됨" 표시 + 분석 기준 줄의 선택 칩에 "· 수정됨" (onChange = map-main.js) */
+  function dirty() { $('#btnRun').addClass('dirty'); if (onChange) onChange(); }
+
+  /* 바뀐 행을 0.6초 강조 (map.css .flash) */
+  function flash($el) {
+    $el.removeClass('flash');
+    void $el[0].offsetWidth;                       // 애니메이션을 처음부터 다시
+    $el.addClass('flash');
+    setTimeout(function () { $el.removeClass('flash'); }, 650);
+  }
+
+  /**
+   * 시나리오 프리셋 적용 (2026-11-17 G, MAP_CONFIG.SCENARIOS 의 한 줄). 왼쪽 패널의 실제 화면 요소를 바로 바꾼다 :
+   *   요인 체크박스(.f-chk · 행의 .off), 가중치 팝업 슬라이더 · 값 라벨 · 채움 · 잠김. 패널이 닫혀 있어도 같은 DOM 을 바꿔 두므로 나중에 열면 그 값이 보인다.
+   *   factors · weights 가 없는 프리셋(기본)은 처음 체크 상태(FACTORS[].on) · 기본 가중치(WEIGHT_GROUPS[].def).
+   *   기준값 슬라이더(노후 연수 등)는 기본값으로 둔다. 프리셋 가중치는 이미 합 100 이라 rebalance 로 다시 나누지 않고 그대로 넣는다
+   *   (합이 100 이 아니거나 꺼진 묶음에 값이 있으면 그때만 rebalance 로 맞춘다). 이벤트를 내지 않으므로 "수정됨" 이 붙지 않는다
+   */
+  function applyPreset(p) {
+    p = p || {};
+    var want = p.factors || C.FACTORS.filter(function (f) { return f.on; }).map(function (f) { return f.key; });
+    C.FACTORS.forEach(function (f) {
+      var $row = $('[data-factor="' + f.key + '"]'), $chk = $row.find('.f-chk');
+      var on = want.indexOf(f.key) >= 0, changed = $chk.is(':checked') !== on;
+      $chk.prop('checked', on);
+      /* 기준값 슬라이더(노후 연수 등)는 프리셋마다 다르지 않고 늘 기본값. 사용자가 고쳐 둔 값("수정됨")이 있으면 기본값으로 되돌린다 */
+      var $rng = $row.find('.f-rng');
+      if ($rng.length && f.def != null && Number($rng.val()) !== f.def) { $rng.val(f.def); changed = true; }
+      if (!changed) return;
+      refreshRow($row);
+      flash($row);
+    });
+    var before = $.extend({}, weights), sum = 0, bad = false;
+    C.WEIGHT_GROUPS.forEach(function (g) {
+      var w = p.weights && p.weights[g.key] != null ? Number(p.weights[g.key]) : g.def;
+      if (locked(g) && w !== 0) bad = true;
+      weights[g.key] = w; sum += w;
+    });
+    if (bad || sum !== 100) rebalance(null); else refreshWeights();
+    C.WEIGHT_GROUPS.forEach(function (g) { if (before[g.key] !== weights[g.key]) flash($('.wp-row[data-gw="' + g.key + '"]')); });
+    $('#btnRun').removeClass('dirty');
+  }
+
+
 
   function init(opts) {
     onRun = opts.onRun;
     onToggle = opts.onToggle;
+    onChange = opts.onChange;
 
     /* 요인 행 */
     $('[data-factor]').each(function () {
@@ -159,7 +203,10 @@ window.MapLayer = (function () {
       if (onRun) onRun(getCriteria());
     });
 
-    /* 패널 접기 */
+    /* 패널 폭 : 오른쪽 끝 손잡이를 끌면 260~480px (기본 300), wf.lpW 에 기억. --lp-w 를 바꾸면 --lp-right · 접기 버튼 · 가중치 팝업 · 지도 위 요소가 같이 움직인다 */
+    Common.resizer({ handle: '#lpGrip', cssVar: '--lp-w', key: 'wf.lpW', min: 260, max: 480, def: 300, sign: 1 });
+
+    /* 패널 여닫기 (처음에는 닫힘 : map.jsp 가 left-closed 를 붙여 렌더링) */
     $('#toggleLeft').on('click', function () {
       var closed = $('.map-layout').toggleClass('left-closed').hasClass('left-closed');
       $(this).attr('aria-expanded', String(!closed));
@@ -167,5 +214,5 @@ window.MapLayer = (function () {
     });
   }
 
-  return { init: init, getCriteria: getCriteria };
+  return { init: init, getCriteria: getCriteria, applyPreset: applyPreset };
 })();

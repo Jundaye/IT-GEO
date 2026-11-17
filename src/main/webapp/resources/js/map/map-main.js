@@ -67,19 +67,31 @@ $(function () {
   /* 지도 조회 파라미터 = 확정 조건 + 현장 확인됨 기간 */
   var viewParams = function () { return $.extend({}, criteria(), { checkedMonths: state.checkedMonths }); };
 
-  /* 결과 리스트 파라미터. 범위 = bbox("지도 화면 안") 또는 구·법정동·행정동 (기본 구 전체) */
+  /* 지금 지도 화면 범위 "minLng,minLat,maxLng,maxLat" ([분석 실행] 과 [이 지역에서 재검색] 이 같이 쓴다). 지도가 없으면 null */
+  function currentBbox() {
+    if (!live()) return null;
+    var b = map.getBounds(), sw = b.getSW(), ne = b.getNE();
+    return [sw.lng(), sw.lat(), ne.lng(), ne.lat()].map(function (v) { return v.toFixed(5); }).join(',');
+  }
+  /* 리스트 범위가 화면(bbox)인지. 주소 · 건물명 검색 중에는 화면 밖 건물도 찾아야 하므로 bbox 를 쓰지 않고 구 · 동 범위로 찾는다 */
+  var byScreen = function () { return !!state.bbox && !state.q; };
+  /* 결과 리스트 파라미터. 범위 = bbox("현재 화면") 또는 구·법정동·행정동 */
   function listParams() {
     var p = $.extend({}, criteria(), { q: state.q });
-    if (state.bbox) p.bbox = state.bbox;
+    if (byScreen()) p.bbox = state.bbox;
     else { p.gu = state.gu; p.dong = state.dong; p.adms = state.adms; }
     return p;
   }
-  /* 리스트 머리 : "구로구 · 구로동 · 구로2동" / "지도 화면 안" */
+  /* 리스트 머리 : "범위 현재 화면 · 지도를 옮기면 '이 지역에서 재검색'" / "구로구 · 구로동 · 구로2동" */
   function renderScope() {
     var g = guOf(state.gu);
-    $('#resultScope').text(state.bbox ? '지도 화면 안'
-      : [g ? g.name : '전체 3개 구', state.dong].concat(state.adms.map(admOfKey)).filter(Boolean).join(' · '));
+    var area = [g ? g.name : '전체 3개 구', state.dong].concat(state.adms.map(admOfKey)).filter(Boolean).join(' · ');
+    /* 앞머리 = 분석할 때의 기준 (2차 G) : "기준 폭우 · 범위 현재 화면" */
+    var basis = state.scenRun ? '<span>기준</span> ' + Common.esc(scenName(state.scenRun) + (state.modRun ? '(수정됨)' : '')) + ' <span>·</span> ' : '';
+    if (byScreen()) $('#resultScope').html(basis + '<span>범위</span> 현재 화면 <span>· 지도를 옮기면 \'이 지역에서 재검색\'</span>');
+    else $('#resultScope').html(basis + '<span>범위</span> ' + Common.esc(area) + (state.q ? ' <span>· 검색은 화면 밖 건물도 찾습니다</span>' : ''));
     /* 법정동·행정동을 고르면 그 경계에 테두리 (행정동 여러 개면 전부). 구만 골랐거나 전체 구면 그리지 않는다 */
+    if (!live()) return;                              // 지도가 없으면(인증 실패 등) 경계 · 색칠은 건너뛴다. 여기서 오류가 나면 뒤의 결과 리스트 조회까지 막힌다
     if (window.DongBoundary && (state.dong || state.adms.length)) DongBoundary.show(map, state.gu, state.dong, state.adms.map(admOfKey));
     else if (window.DongBoundary) DongBoundary.show(null);
     if (MapMarker.filterGu) MapMarker.filterGu(state.gu, !!(state.dong || state.adms.length));       // 동을 고르면 구 색칠은 숨김
@@ -96,10 +108,19 @@ $(function () {
     var $lg = $('#legend'), h = $lg.is(':visible') ? $lg.outerHeight() : 0;
     $('#btnRefetch').css('bottom', (h ? 12 + h + 30 : 40) + 'px');
   }
+  /* 오른쪽 패널을 열고 검색 결과 화면으로 (2차 N). [분석 실행] 과 [이 지역에서 재검색] 이 같이 쓴다.
+     건물 상세를 보던 중이면 상세(와 3D)는 닫는다. 패널을 열면 여닫기 버튼 방향 · 검색 줄 · 지도 유형 위치는 CSS 와 패널 class 감시(MutationObserver)가 같이 맞춘다 */
+  function showResultPanel() {
+    if (window.Bld3D) Bld3D.hide();
+    $('#detailView').hide(); $('#resultView').removeClass('empty').show();
+    $('#panelRight').addClass('open');
+  }
+  /* [이 지역에서 재검색] : 패널이 닫혀 있든 건물 상세를 보고 있든 항상 검색 결과 리스트를 보여준다. 지도는 움직이지 않는다.
+     직전에 고른 건물이 새 리스트에 있으면 그 행만 강조된다 (MapResult 가 기억) */
   $('#btnRefetch').on('click', function () {
     if (!live()) return;
-    var b = map.getBounds(), sw = b.getSW(), ne = b.getNE();
-    state.bbox = [sw.lng(), sw.lat(), ne.lng(), ne.lat()].map(function (v) { return v.toFixed(5); }).join(',');
+    showResultPanel();
+    state.bbox = currentBbox();
     $(this).removeClass('show');
     renderScope();
     MapResult.load(true);
@@ -174,10 +195,12 @@ $(function () {
     }).fail(function () { realRings.resolve({}); });
     return realRings;
   }
+  var guSeq = 0;
   function loadGus() {
-    var params = viewParams();
+    var params = viewParams(), my = ++guSeq;
     loadRealRings().done(function (rings) {
       MapApi.gus(params).done(function (list) {
+        if (my !== guSeq) return;                                 // 늦게 온 옛 응답 (시나리오를 빠르게 바꿨을 때)
         (list || []).forEach(function (g) { if (rings[g.sggCd]) g.ring = rings[g.sggCd]; });
         MapMarker.renderGu(list); setupLock(list);
       });
@@ -220,7 +243,7 @@ $(function () {
     /* 바깥 사각형(서울 서남부를 넉넉히) + 소속 구 ring 을 구멍으로. 지도 타일에 다크 필터(invert + hue-rotate)가 걸려 있어
        오버레이도 같이 뒤집히므로, 화면에 #0b0d12 로 보이게 하려면 그 반전색(#f4f2ed)을 넣는다 */
     var outer = [LL(37.2, 126.5), LL(37.2, 127.3), LL(37.8, 127.3), LL(37.8, 126.5), LL(37.2, 126.5)];
-    lock.mask = new naver.maps.Polygon({ map: map, paths: [outer, hole], fillColor: '#f4f2ed', fillOpacity: 0.6, strokeWeight: 0, strokeOpacity: 0, clickable: false, zIndex: 2 });
+    lock.mask = new naver.maps.Polygon({ map: map, paths: [outer, hole], fillColor: maskColor(), fillOpacity: 0.6, strokeWeight: 0, strokeOpacity: 0, clickable: false, zIndex: 2 });
     lock.line = new naver.maps.Polyline({ map: map, path: hole, strokeColor: '#4a8fe0', strokeWeight: 2, strokeOpacity: 1, clickable: false, zIndex: 3 });
     /* 이동 범위 = 구 bbox + 사방 2km (위도 0.018°, 경도 0.0227°), 최소 줌 12 */
     var dLat = 0.018, dLng = 0.0227;
@@ -303,16 +326,21 @@ $(function () {
   if (live()) {
     naver.maps.Event.addListener(map, 'zoom_changed', onLevelChanged);
     naver.maps.Event.addListener(map, 'bounds_changed', function () { if (window.Bld3D) Bld3D.moving(); });   // 지도가 움직이는 동안 3D 작업 미룸 (map-3d.js)
-    naver.maps.Event.addListener(map, 'idle', function () { scheduleLoad(); onMoved(); if (window.Bld3D) { Bld3D.idle(); Bld3D.warmup(modeOf(zoomNow()) === 'building'); } });   // 건물 핀 단계에서 1초 멈추면 3D 엔진만 미리 켬 (map-3d.js)
+    naver.maps.Event.addListener(map, 'idle', function () { scheduleLoad(); onMoved(); if (window.Bld3D) { Bld3D.idle(); Bld3D.warmup(modeOf(zoomNow()) === 'building'); } });   // 건물 핀 단계에서 1초 멈추면 3D 엔진만 미리 켬
   }
 
   /* "분석 실행" : 이때 조건을 확정 → 구 요약 · 도넛/핀 · 결과 리스트를 한 번에 다시. 이후 지도 이동 · 재검색 · 보관함 저장은 모두 이 조건 */
   function runAnalysis(c) {
     state.analyzed = true;
+    c.scenario = scen;                                 // 어떤 기준으로 분석했는지도 조건에 남긴다 (보관함 저장 criteria JSON 에 그대로. 서버는 모르면 무시)
+    c.modified = scenMod;                              // 프리셋에서 값을 직접 고쳤는지
+    state.scenRun = scen; state.modRun = scenMod;
     state.criteria = c;
     state.cellByLevel = {};
-    $('#panelRight').addClass('open');
-    $('#detailView').hide(); $('#resultView').show();
+    /* 리스트 범위 = 지금 보이는 화면 (2026-11-17). 예전에는 비워 둬서 구 전체가 나오고 [재검색] 을 눌러야 화면 범위가 됐다.
+       동(법정동 · 행정동)을 골라 둔 상태면 지도 핀 · 도넛도 그 동만 그리므로 리스트도 그 동 범위 그대로 둔다 */
+    state.bbox = (state.dong || state.adms.length) ? null : currentBbox();
+    showResultPanel();
     $('#btnRefetch').removeClass('show');
     loadGus();
     loadPoints();
@@ -335,16 +363,112 @@ $(function () {
     mode: function () { return modeOf(zoomNow()); },
     onMarkClick: function (m) {
       if (m.kind === 'cluster') flyTo(m.data.lat, m.data.lng, Math.max(C.ZOOM.BUILDING, zoomNow() + 1));   // 묶음 → 확대
-      else selectBuilding(m.data, false);
+      else {
+        selectBuilding(m.data, false);
+        if (street.on) openPano(LL(m.data.lat, m.data.lng), m.data);   // 로드뷰 모드 : 그 건물 앞 로드뷰를 열고 사진 속에 건물 핀 1개 (2차 O)
+      }
     },
     onGuClick: function (g) { flyTo(g.lat, g.lng, C.ZOOM.CLUSTER_MIN); },
     onAreaClick: function (a) { flyTo(a.lat, a.lng, C.ZOOM.CLUSTER_MIN); }   // 동 집계 원을 누르면 확대 → 도넛
   });
-  MapLayer.init({ onRun: runAnalysis, onToggle: resize });
-  MapResult.init({ getParams: listParams, onSelect: function (b) { selectBuilding(b, true); } });
+  MapLayer.init({ onRun: runAnalysis, onToggle: resize, onChange: function () { setMod(true); } });   // 패널에서 직접 바꾸면 선택 칩에 "· 수정됨"
+  MapResult.init({ getParams: listParams, onSelect: function (b) { selectBuilding(b, true); },
+    /* 0건 안내 문구용 : 지금 리스트 범위가 화면인지, 아니면 어느 구 · 동인지 */
+    getScope: function () {
+      var g = guOf(state.gu);
+      return { screen: byScreen(), area: [g ? g.name : '전체 3개 구', state.dong].concat(state.adms.map(admOfKey)).filter(Boolean).join(' ') };
+    } });
+  /* 분석 중 알약 (2차 R) : 결과를 새로 받는 동안 분석 기준 줄 아래에. MapResult 가 300ms 지연 뒤 'wf:busy' 로 알린다 */
+  $(document).on('wf:busy', function (e, on) { $('#anPill').toggleClass('show', !!on); });
   MapPanel.init({ getCriteria: criteria, onArchived: setChips, onClose: resize });
 
   function resize() { if (live()) naver.maps.Event.trigger(map, 'resize'); }
+
+  /* 오른쪽 패널 여닫기 버튼 (2차 11-17). 패널은 .right-panel.open 으로 여닫고, × 로 닫은 뒤에도 이 버튼으로 다시 연다.
+     뷰(결과 목록 / 건물 상세)는 닫을 때 건드리지 않으므로 다시 열면 마지막에 보던 그대로. 분석 전이면 #resultView.empty 의 안내 문구만 보인다.
+     × · 분석 실행 · 건물 선택으로도 여닫히므로 aria-expanded 는 클래스가 바뀔 때마다 맞춘다 */
+  var panelRight = document.getElementById('panelRight');
+  $('#toggleRight').on('click', function () { $(panelRight).toggleClass('open'); });
+  var rightWasOpen = false;
+  new MutationObserver(function () {
+    var open = $(panelRight).hasClass('open');
+    $('#toggleRight').attr('aria-expanded', String(open));
+    if (open !== rightWasOpen) {                     // 패널이 닫히면 3D 도 닫고, 건물 상세를 보던 채로 다시 열면 3D 를 다시 준비
+      rightWasOpen = open;
+      if (window.Bld3D) { if (open) MapPanel.refresh3d(); else Bld3D.hide(); }
+    }
+    fitTop();                                        // 위쪽 두 줄(분석 기준 · 검색)이 겹치지 않게
+    fitPano();                                       // 로드뷰가 열려 있으면 패널을 뺀 영역에 다시 맞춘다
+  }).observe(panelRight, { attributes: true, attributeFilter: ['class'] });
+
+  /* ---------- 분석 기준 줄 (2차 11-17 G) : [기본] [폭우] [폭염] [한파] ┃ [가중치 보기] | [접기] ----------
+     시나리오 버튼 = MAP_CONFIG.SCENARIOS 순서대로. 처음에는 '기본' 이 선택돼 있다 (분석은 아직 안 돌림)
+       시나리오를 누르면 : 왼쪽 패널의 체크 · 가중치를 프리셋대로 바꾸고(MapLayer.applyPreset) 바로 현재 화면으로 분석. 왼쪽 패널은 열지 않는다
+       [가중치 보기] : 시나리오가 아니라 왼쪽 패널을 여닫는 버튼 (여닫기 탭 #toggleLeft 와 같은 동작). 선택 · 값은 그대로, 분석도 돌리지 않는다.
+                      눌림 표시는 .map-layout 의 left-closed 유무로 CSS 가 그리므로 여닫기 탭으로 여닫아도 같이 바뀐다
+       왼쪽 패널에서 체크 · 기준값 · 가중치를 직접 바꾸면 : 선택은 그대로 두고 칩 글자가 "폭우 · 수정됨" (MapLayer.init 의 onChange).
+                      같은 · 다른 시나리오를 다시 누르면 프리셋 값으로 돌아가고 "수정됨" 이 사라진다. 고친 값으로 분석하려면 패널의 [분석 실행]
+     접힘(wf.scenFold) : 선택한 시나리오 하나 ┃ 가중치 보기 | 펼치기. 시나리오를 골라도 자동으로 접지 않는다 */
+  var scen = 'base', scenMod = false;
+  var SCEN = C.SCENARIOS || [];
+  function scenName(k) {
+    var x = SCEN.filter(function (v) { return v.key === k; })[0];
+    return x ? x.name : '';
+  }
+  function setMod(m) {
+    scenMod = !!m;
+    $('#scenList .scen-btn').removeClass('mod').removeAttr('title').filter('.on').toggleClass('mod', scenMod).attr('title', scenMod ? '수정됨' : null);
+    fitTop();
+  }
+  function setScen(k) {
+    scen = k;
+    $('#scenList .scen-btn').each(function () { $(this).toggleClass('on', $(this).attr('data-scen') === k); });
+    setMod(false);
+  }
+  function setFold(f) {
+    $('#scenBar').toggleClass('folded', f);
+    $('#scenFold').attr('aria-expanded', String(!f));
+    try { localStorage.setItem('wf.scenFold', f ? '1' : '0'); } catch (e) {}
+    fitTop();
+  }
+  $('#scenList').html(SCEN.map(function (v) {
+    return '<button type="button" class="scen-btn" data-scen="' + Common.esc(v.key) + '">'
+      + (v.icon ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + Common.esc(v.icon) + '"/></svg>' : '') + Common.esc(v.name) + '<span class="scen-mod"> · 수정됨</span></button>';
+  }).join('') + '<i class="scen-sep"></i><button type="button" class="scen-view" id="scenView">가중치 보기</button>');
+  $('#scenView').on('click', function () { $('#toggleLeft').trigger('click'); });   // 왼쪽 패널 여닫기 (탭과 같은 함수 → aria · 위쪽 줄 맞춤까지 같이)
+  $('#scenFold').attr('aria-expanded', String(!$('#scenBar').hasClass('folded')));
+  $('#scenFold').on('click', function () { setFold(!$('#scenBar').hasClass('folded')); });
+  $('#scenList').on('click', '.scen-btn', function () {
+    if ($('#scenBar').hasClass('folded')) { setFold(false); return; }     // 접힌 상태에서 남은 버튼 = 펼치기
+    var k = $(this).attr('data-scen');
+    MapLayer.applyPreset(SCEN.filter(function (v) { return v.key === k; })[0]);
+    setScen(k);
+    runAnalysis(MapLayer.getCriteria());
+  });
+
+  /* 위쪽 두 줄이 만날 만큼 좁으면 차례로 줄인다 (2차 H) : top-n1 구 · 동 칸 92px → top-n2 검색창을 돋보기 버튼으로 → top-n3 분석 기준 줄을 접힌 모양으로 (저장된 접힘 상태는 그대로).
+     패널이 움직이는 중에도 맞게 나오도록 화면 위치가 아니라 폭(패널 폭 변수 · 열림 상태)으로 계산한다 */
+  function fitTop() {
+    var $l = $('.map-layout'), bar = document.getElementById('scenBar'), top = document.querySelector('.map-top');
+    if (!bar || !top) return;
+    $l.removeClass('top-n1 top-n2 top-n3');
+    var cs = getComputedStyle(document.documentElement);
+    var lpW = parseFloat(cs.getPropertyValue('--lp-w')) || 300, rpW = parseFloat(cs.getPropertyValue('--rp-w')) || 400;
+    var left = $l.hasClass('left-closed') ? 44 : 24 + lpW;                 // .scen-bar 의 left (열림 = --lp-right)
+    var right = $(panelRight).hasClass('open') ? rpW + 12 : 44;            // .map-top 의 right
+    var avail = $l.width() - left - right - 12;
+    var need = function () { return bar.offsetWidth + top.offsetWidth; };
+    if (need() > avail) { $l.addClass('top-n1');
+      if (need() > avail) { $l.addClass('top-n2');
+        if (need() > avail) $l.addClass('top-n3'); } }
+    if (!$l.hasClass('top-n2')) $('.map-top .search').removeClass('open');
+  }
+  $(window).on('resize', fitTop);
+  $('#toggleLeft').on('click', fitTop);                                    // MapLayer 의 여닫기 처리 뒤에 불린다
+  $(document).on('mousemove', function () { if (document.body.classList.contains('dragging')) fitTop(); })   // 패널 폭을 끄는 동안
+    .on('mouseup', function () { setTimeout(fitTop, 0); });
+  $('.pn-grip').on('dblclick', function () { setTimeout(fitTop, 0); });
+  setScen('base');
 
   /* ---------- 상단 : 구 · 동(법정동 → 행정동 2단계) · 검색 · 칩 ---------- */
   var esc = Common.esc;
@@ -487,23 +611,187 @@ $(function () {
   function search() {
     state.q = $.trim($('#searchQ').val());
     if (!state.analyzed) { runAnalysis(MapLayer.getCriteria()); return; }
+    renderScope();                                    // 검색 중에는 범위가 화면 → 구 · 동 으로 바뀐다
     MapResult.load(true);
   }
-  $('#btnSearch').on('click', search);
+  $('#btnSearch').on('click', function () {
+    var $s = $('.map-top .search');
+    if ($('.map-layout').hasClass('top-n2') && !$s.hasClass('open')) { $s.addClass('open'); $('#searchQ').trigger('focus'); return; }   // 돋보기로 접혀 있으면 먼저 펼친다 (2차 H)
+    search();
+  });
+  $('#searchQ').on('blur', function () {              // 비운 채로 벗어나면 다시 돋보기로
+    var el = this;
+    setTimeout(function () { if (!el.value && document.activeElement !== el) $('.map-top .search').removeClass('open'); }, 200);
+  });
   $('#searchQ').on('keydown', function (e) { if (e.key === 'Enter') search(); });
   /* 검색창 [×] : 지우고, 검색한 상태였으면 검색어 없이 다시 */
   $('#searchQ').on('input', function () { $('#searchClear').prop('hidden', this.value === ''); });
   $('#searchClear').on('click', function () {
     $('#searchQ').val('').trigger('focus');
     $(this).prop('hidden', true);
-    if (state.q) { state.q = ''; if (state.analyzed) MapResult.load(true); }
+    if (state.q) { state.q = ''; renderScope(); if (state.analyzed) MapResult.load(true); }
   });
 
   function setChips() { /* 상단 칩은 없앴다 (대시보드로) */ }
 
-  /* 확대 · 축소 */
-  $('#zoomIn').on('click', function () { if (live()) map.setZoom(Math.min(C.ZOOM.MAX, map.getZoom() + 1), true); });
-  $('#zoomOut').on('click', function () { if (live()) map.setZoom(Math.max(C.ZOOM.MIN, map.getZoom() - 1), true); });
+  /* ---------- 줌 단계 : + / 세로 눈금 슬라이더 / − (2026-11-17) ----------
+     눈금 = 줌 한 단계 (MIN~MAX, 구청 계정은 LOCK_MIN 부터). 아래부터 현재 단계까지 채우고, 손잡이 옆에 숫자 */
+  var Z_MIN = lockGu ? C.ZOOM.LOCK_MIN : C.ZOOM.MIN, Z_MAX = C.ZOOM.MAX, Z_PAD = 10;
+  var $zs = $('#zoomSlider');
+  var zsY = function (z) { return Z_PAD + (z - Z_MIN) / (Z_MAX - Z_MIN) * ($zs.height() - Z_PAD * 2); };   // 아래에서부터 px
+  for (var zt = Z_MIN; zt <= Z_MAX; zt++) $zs.append($('<i class="zs-tick"></i>').css('bottom', zsY(zt) + 'px'));
+  $zs.append($('#zsThumb, #zsNum'));                    // 눈금보다 위에 그려지게 맨 뒤로
+  function renderZoom() {
+    var z = Math.max(Z_MIN, Math.min(Z_MAX, Math.round(zoomNow()))), y = zsY(z);
+    $('#zsFill').css('height', (y - Z_PAD) + 'px');
+    $('#zsThumb, #zsNum').css('bottom', y + 'px');
+    $('#zsNum').text(z);
+  }
+  function setZoomTo(z) {
+    z = Math.max(Z_MIN, Math.min(Z_MAX, z));
+    if (live() && z !== map.getZoom()) map.setZoom(z, true);
+  }
+  /* 트랙을 누르거나 손잡이를 끌면 그 높이의 단계로 */
+  function zoomAtY(clientY) {
+    var r = $zs[0].getBoundingClientRect(), h = r.height - Z_PAD * 2;
+    var t = Math.max(0, Math.min(1, (r.bottom - Z_PAD - clientY) / h));
+    setZoomTo(Math.round(Z_MIN + t * (Z_MAX - Z_MIN)));
+  }
+  $zs.on('mousedown', function (e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    zoomAtY(e.clientY);
+    $(document).on('mousemove.zs', function (ev) { zoomAtY(ev.clientY); })
+      .on('mouseup.zs', function () { $(document).off('.zs'); });
+  });
+  $('#zoomIn').on('click', function () { if (live()) setZoomTo(map.getZoom() + 1); });
+  $('#zoomOut').on('click', function () { if (live()) setZoomTo(map.getZoom() - 1); });
+  if (live()) naver.maps.Event.addListener(map, 'zoom_changed', renderZoom);   // 휠 · 더블클릭 · 프로그램 이동 모두 반영
+  renderZoom();
+
+  /* ---------- 지도 유형 : 일반 / 위성(HYBRID = 항공사진 + 도로명 · 지명), 로드뷰는 따로 켜고 끄는 토글 (2026-11-17) ---------- */
+  var mapType = 'normal';
+  /* 구청 계정 가림막 색 : 타일이 반전되는 경우(다크 테마 + 일반 지도)에만 반전색을 넣어야 화면에 어둡게 보인다. 라이트 테마나 위성은 반전이 없으니 그대로 어두운 색 */
+  function maskColor() { return (mapType !== 'sat' && Common.theme() !== 'light') ? '#f4f2ed' : '#0b0d12'; }
+  /* 테마가 바뀌면 (헤더 버튼 → common.js 'wf:theme') : JS 로 색을 넣은 것만 다시. 지도 유형은 그대로 둔다 (테마와 지도 유형은 서로 건드리지 않는다) */
+  $(document).on('wf:theme', function () {
+    if (lock.mask) lock.mask.setOptions({ fillColor: maskColor() });
+    loadGus();                                        // 구 색칠 (라이트는 한 단계 진하게)
+  });
+  try { if (localStorage.getItem('wf.mapType') === 'sat') mapType = 'sat'; } catch (e) {}
+  function applyMapType() {
+    var sat = mapType === 'sat';
+    if (live()) map.setMapTypeId(sat ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
+    /* 타일 다크 필터(반전)는 일반 지도에만. 위성은 원래 색 (map.css .map-sat).
+       이 두 클래스는 지도 타일 · 마커의 색 반전에만 쓴다. 화면 테마(라이트/다크)는 지도 유형과 무관 : 위성으로 바꿔도, 일반으로 돌아와도
+       data-theme · 테마 저장값 · 패널/헤더 색은 건드리지 않는다 (2차 L. 테마는 헤더 버튼으로만 바뀌게 될 예정) */
+    $('.map-layout').toggleClass('map-sat', sat).toggleClass('map-normal', !sat);
+    $('#mapType button[data-type="normal"]').toggleClass('on', !sat);
+    $('#mapType button[data-type="sat"]').toggleClass('on', sat);
+    /* 구청 계정 가림막 : 일반은 반전돼 보이므로 반전색, 위성은 그대로 어두운 색 */
+    if (lock.mask) lock.mask.setOptions({ fillColor: maskColor() });
+  }
+  $('#mapType').on('click', 'button[data-type="normal"], button[data-type="sat"]', function () {
+    mapType = $(this).attr('data-type');
+    try { localStorage.setItem('wf.mapType', mapType); } catch (e) {}
+    applyMapType();
+  });
+  applyMapType();
+
+  /* 로드뷰 : 켜면 파란 도로선(StreetLayer), 지도를 누르면 그 위치의 파노라마를 지도 영역 위에. 네이버 스크립트의 submodules=panorama 필요 */
+  var street = { on: false, layer: null, pano: null, click: null, mark: null, target: null, aim: false };
+  var hasPano = function () { return live() && !!naver.maps.StreetLayer && !!naver.maps.Panorama; };
+  function closePano() { $('#panoWrap').removeClass('open'); clearPanoMark(); }
+
+  /* 건물 마커로 로드뷰에 들어왔을 때만 : 사진 속 그 건물 위치에 핀 1개 + 이름 (2차 O). 도로를 눌러 들어오면 핀 없음, 주변 다른 건물도 안 띄운다.
+     네이버 공식 예제 "Panorama image marker" 방식 그대로 : 이미지 아이콘 Marker 를 setMap(pano), 시선은 pano.getProjection().fromCoordToPov(좌표).
+     핀 모양 = 메인 컬러 물방울 + 아래 흰 이름표 (예제가 이미지 아이콘만 쓰므로 SVG 를 이미지 주소로 만들어 넣는다). 높이 옵션은 문서에 없어 기본값 */
+  function panoIcon(name) {
+    var t = String(name || '').replace(/[<>&"']/g, ' ');
+    var pc = $.trim(getComputedStyle(document.documentElement).getPropertyValue('--primary')) || '#448ede';   // 지금 테마의 메인 컬러
+    var w = Math.max(64, Math.min(260, 20 + t.length * 12)), cx = w / 2;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="68" viewBox="0 0 ' + w + ' 68">'
+      + '<path d="M' + cx + ' 40c-7-9-12-14-12-21a12 12 0 0 1 24 0c0 7-5 12-12 21z" fill="' + pc + '" stroke="#fff" stroke-width="2"/>'
+      + '<circle cx="' + cx + '" cy="19" r="4.5" fill="#fff"/>'
+      + '<rect x="1" y="44" width="' + (w - 2) + '" height="22" rx="2" fill="#fff" stroke="' + pc + '"/>'
+      + '<text x="' + cx + '" y="59.5" text-anchor="middle" font-size="12" font-family="sans-serif" fill="#1b1b1e">' + t + '</text></svg>';
+    return { url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), size: new naver.maps.Size(w, 68), anchor: new naver.maps.Point(cx, 40) };
+  }
+  function clearPanoMark() {
+    if (street.mark) { street.mark.setMap(null); street.mark = null; }
+    street.target = null; street.aim = false;
+    $('#panoTarget').removeClass('show');
+  }
+  /* 파노라마가 촬영 지점에 붙은 뒤 : 건물 핀을 올리고 시선을 그 건물 쪽으로 (좌우만. 상하 각도는 PANO_TILT 유지). 화살표로 걸어서 옮길 때는 다시 돌리지 않는다 */
+  function placePanoMark() {
+    var t = street.target;
+    if (!t || !street.pano) return;
+    var pos = LL(t.lat, t.lng), name = t.bldNm ? Common.shortAddr(t.addr) + ' ' + t.bldNm : Common.shortAddr(t.addr) + (t.useNm ? ' ' + t.useNm : '');
+    if (!street.mark) {
+      street.mark = new naver.maps.Marker({ position: pos, icon: panoIcon(name) });
+      naver.maps.Event.addListener(street.mark, 'click', function () { if (street.target) selectBuilding(street.target, false); });   // 핀을 누르면 그 건물 상세
+    }
+    street.mark.setMap(street.pano);
+    $('#panoTarget').text(name).addClass('show');
+    if (street.aim) {
+      street.aim = false;
+      var proj = street.pano.getProjection(), look = proj && proj.fromCoordToPov(pos);
+      if (look) street.pano.setPov({ pan: look.pan, tilt: PANO_TILT, fov: street.pano.getPov().fov });
+    }
+  }
+  /* 이동 화살표는 네이버가 바닥(도로) 위에 그려서 CSS 로는 못 옮긴다 (2차 지시문 F) →
+     ① 파노라마를 실제로 보이는 영역(오른쪽 패널을 뺀 곳)에 정확히 맞추고  ② 시선을 조금 아래로 둬서 화살표가 화면 가운데 쪽으로 올라오게 한다.
+     옵션 · 메서드는 네이버 지도 v3 Panorama 문서에 있는 것만 : pov { pan, tilt(-90 아래 ~ 90 위), fov(20~100) } · setPov · getPov · setSize · setPosition */
+  var PANO_TILT = -18;
+  /* 파노라마 크기 = #pano 의 지금 크기. 문서에 자동 리사이즈가 없어서 영역이 바뀔 때마다(창 크기 · 오른쪽 패널 여닫기 · 폭 조절) 직접 맞춘다 */
+  function fitPano() {
+    if (!street.pano || !$('#panoWrap').hasClass('open')) return;
+    var el = document.getElementById('pano');
+    if (el.clientWidth && el.clientHeight) street.pano.setSize(new naver.maps.Size(el.clientWidth, el.clientHeight));
+  }
+  /* target = 건물 마커로 들어온 경우의 그 건물 (bldId · lat · lng · addr …). 도로를 눌렀으면 없음 → 있던 핀은 지운다 */
+  function openPano(coord, target) {
+    $('#panoWrap').addClass('open');                    // 먼저 보이게 해야 크기가 잡힌다
+    clearPanoMark();
+    if (target) { street.target = target; street.aim = true; }
+    if (!street.pano) {
+      street.pano = new naver.maps.Panorama('pano', { position: coord, pov: { pan: 0, tilt: PANO_TILT, fov: 100 } });
+      naver.maps.Event.addListener(street.pano, 'init', placePanoMark);            // 처음 만들 때 (공식 예제와 같은 시점)
+      naver.maps.Event.addListener(street.pano, 'pano_changed', placePanoMark);    // 위치를 옮긴 뒤
+      naver.maps.Event.addListener(street.pano, 'pano_status', function (status) {
+        if (status === 'ERROR') { closePano(); Common.toast('이 위치에는 로드뷰가 없습니다. 파란 도로선 위를 눌러 주세요.'); }
+      });
+    } else {
+      fitPano();
+      street.pano.setPosition(coord);
+      var pov = street.pano.getPov();                   // 보던 방향은 그대로, 상하 각도만 다시 아래로
+      street.pano.setPov({ pan: pov.pan, tilt: PANO_TILT, fov: pov.fov });
+    }
+  }
+  $(window).on('resize', fitPano);
+  /* 오른쪽 패널 폭을 끄는 동안 · 여닫는 애니메이션(.26s)이 끝난 뒤에도 맞춘다 */
+  $(document).on('mouseup', function () { setTimeout(fitPano, 0); });
+  $('#panelRight').on('transitionend', fitPano);
+  function setStreet(on) {
+    if (on && !hasPano()) { Common.toast('로드뷰를 불러오지 못했습니다.'); return; }
+    street.on = on;
+    $('#btnStreet').toggleClass('on', on).attr('aria-pressed', String(on));
+    $map.closest('.map-wrap').toggleClass('street-on', on);
+    if (!live()) return;
+    if (on) {
+      if (!street.layer) street.layer = new naver.maps.StreetLayer();
+      street.layer.setMap(map);
+      street.click = naver.maps.Event.addListener(map, 'click', function (e) { openPano(e.coord); });
+      Common.toast('파란 도로선 위를 누르면 로드뷰가 열립니다.');
+    } else {
+      if (street.layer) street.layer.setMap(null);
+      if (street.click) { naver.maps.Event.removeListener(street.click); street.click = null; }
+      closePano();
+    }
+  }
+  $('#btnStreet').on('click', function () { setStreet(!street.on); });
+  $('#panoClose').on('click', closePano);
+  $(document).on('keydown', function (e) { if (e.key === 'Escape') closePano(); });
 
   /* ---------- 시작 : 동 목록 + 구 경계(기본 기준) + 현장 확인됨 핀 ---------- */
   loadDongs();
@@ -512,6 +800,18 @@ $(function () {
   loadGus();
   loadChecked();
   /* 05 [지도에서 보기] (map.do?bldId=) : 그 건물로 가서 상세 패널을 연다. 구청 계정이 남의 구 건물을 열려 하면 서버가 bldId 를 비우고 안내만 (15단계 A-2) */
+  /* 데이터 업데이트 모달이 닫힐 때 (DB 가 바뀐 경우) : 현재 조건으로 지도 · 결과를 다시. 분석 전이면 구 요약 · 현장 확인만 (dataupdate-modal.js) */
+  window.WF_MAP_RELOAD = function () {
+    state.cellByLevel = {};
+    loadGus(); loadPoints(); loadChecked();
+    if (state.analyzed) MapResult.load(true);
+  };
+  /* map.do?changed=up (데이터 업데이트 완료 → [새로 위험해진 N동 지도에서 보기]) : 오른쪽 결과 패널을 연다.
+     그 건물들만 추리는 것은 배치 서버가 report.diff(upBldIds)를 주면 서버 쪽에 연결한다. 지금은 현재 조건의 결과 그대로 */
+  if (window.OPEN_CHANGED === 'up') {
+    runAnalysis(MapLayer.getCriteria());
+    Common.toast('새로 위험해진 건물만 추리는 기능은 배치 서버 연동 뒤 적용됩니다. 지금은 전체 결과입니다.');
+  }
   if (window.OPEN_MSG) Common.toast(window.OPEN_MSG);
   if (window.OPEN_BLD) {
     MapApi.building($.extend({}, criteria(), { bldId: window.OPEN_BLD })).done(function (d) {

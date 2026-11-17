@@ -61,6 +61,7 @@ public class DataUpdateController {
 	public ResponseEntity<?> job(@RequestParam("id") String id, HttpSession session) {
 		checkCity(session);
 		try {
+			// 배치 서버 응답을 그대로 넘긴다 (feed · report.diff 가 생겨도 그대로 지나간다)
 			return ResponseEntity.ok(rest.getForObject(PY + "/pipeline/jobs/{id}", Map.class, id));
 		} catch (HttpClientErrorException.NotFound e) {       // 배치 서버가 다시 켜져 작업 기록이 사라진 경우
 			return ResponseEntity.status(404).body(Collections.singletonMap("msg", "작업 기록이 없습니다. 다시 실행해 주세요."));

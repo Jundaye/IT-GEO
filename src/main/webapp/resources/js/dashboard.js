@@ -22,3 +22,5 @@ $(function () {
     }
   });
 });
+/* 차트 색은 그릴 때 CSS 토큰을 읽어 넣으므로, 테마가 바뀌면 화면을 다시 불러 새 색으로 그린다 (2차 A) */
+$(document).on('wf:theme', function () { location.reload(); });

@@ -33,6 +33,8 @@ window.MAP_CONFIG = {
   PIN_ICON_MAX: 200,
 
   COLORS: { red: '#D93A3A', orange: '#EC8B2F', yellow: '#E2B52A', green: '#3E9E5A', blue: '#4a8fe0' },
+  /* 라이트 테마에서 지도 위 구 영역 (2차 A-3) : 밝은 지도 위라 한 단계 진하게. stroke = 테두리, fill = 채움 색, op = 채움 투명도. 없는 색은 다크 값 그대로 */
+  GU_LIGHT: { red: { stroke: '#c62a32', fill: '#e23c42', op: 0.25 }, orange: { stroke: '#c27a0c', fill: '#ec941e', op: 0.28 } },
 
   /* 취약 점수 → 색 구간 (도넛 조각 · 핀 색). hist 순서와 같다 */
   LEVELS: [
@@ -68,6 +70,27 @@ window.MAP_CONFIG = {
     { key: 'econ',  label: '경제 여건', def: 10, factors: ['cheap'],                      names: '저가 주택' }
   ],
   WEIGHT_STEP: 5,
+
+  /* 시나리오 프리셋 (2026-11-17 임시값 · 숫자만 바꾸면 됨). 지도 왼쪽 위 "분석 기준" 줄의 시나리오 버튼 = 이 배열 순서대로 (그 뒤 [가중치 보기] 는 왼쪽 패널 여닫기)
+     factors = 켤 요인 (나머지는 끔), weights = 묶음 가중치 (합 100, 5 단위). factors · weights 가 없으면 기본값(FACTORS[].on · WEIGHT_GROUPS[].def)
+     기준값(노후 연수 · 침수 횟수 · 해발 · 공시가 백분위)은 바꾸지 않고 지금 값 그대로
+     icon = 24×24 선 아이콘의 path d (흑백, 글자색을 따라감). 시나리오를 늘릴 때는 여기에 한 줄만 추가하면 버튼이 생긴다 */
+  SCENARIOS: [
+    { key: 'base', name: '기본',     // WEIGHT_GROUPS[].def + 처음 체크 상태 그대로
+      icon: 'M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1M15 5v4M9 10v4M17 15v4' },
+    { key: 'rain', name: '폭우',     // 반지하 침수 피해, 침수흔적 · 저지대가 핵심
+      icon: 'M7 15a4 4 0 0 1 .6-7.9 5.5 5.5 0 0 1 10.6 1.4A3.3 3.3 0 0 1 17.5 15H7zM8.5 18l-1 2.5M12.5 18l-1 2.5M16.5 18l-1 2.5',
+      factors: ['ugrnd', 'old', 'viol', 'flood', 'low', 'cheap'],
+      weights: { space: 35, bld: 15, flood: 40, econ: 10 } },
+    { key: 'heat', name: '폭염',     // 옥탑 · 고시원(창 없는 방) · 노후 단열, 저소득 냉방 부담
+      icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8',
+      factors: ['rooftop', 'gosiwon', 'old', 'viol', 'cheap'],
+      weights: { space: 40, bld: 25, flood: 0, econ: 35 } },
+    { key: 'cold', name: '한파',     // 반지하 습기 · 옥탑 단열 · 노후 난방, 저소득 난방비 부담
+      icon: 'M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5',
+      factors: ['ugrnd', 'rooftop', 'gosiwon', 'old', 'viol', 'cheap'],
+      weights: { space: 30, bld: 35, flood: 0, econ: 35 } }
+  ],
 
   /* 왼쪽 패널 요인. param 이 있으면 슬라이더 기준값이 서버 파라미터로 간다 */
   FACTORS: [

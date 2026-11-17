@@ -47,6 +47,18 @@ public class ResidentCountTO {
 		return sb.toString();
 	}
 
+	/** 상세 패널 "거주 취약 가구" 한 줄 (2026-11-17) : 해당하는 유형 전부를 많은 순으로, 수와 함께 ("75세 이상 2 · 심한 장애 1 · 지하 거주 2") */
+	public String getVulnLine() {
+		java.util.List<int[]> idx = new java.util.ArrayList<>();
+		String[] names = { "고위험고립", "사회적고립", "75세 이상", "심한 장애", "사각지대", "건보료 체납", "독박돌봄", "지하 거주", "옥탑 거주", "차상위·기초생활" };
+		int[] counts = { highRiskHh, socialIsoHh, old75, severeDsbl, blindHh, arrearsHh, careBurdenHh, ugrndHh, rooftopHh, nearPoorHh };
+		for (int i = 0; i < counts.length; i++) if (counts[i] > 0) idx.add(new int[] { counts[i], i });
+		idx.sort((a, b) -> b[0] - a[0]);
+		StringBuilder sb = new StringBuilder();
+		for (int[] x : idx) { if (sb.length() > 0) sb.append(" · "); sb.append(names[x[1]]).append(' ').append(x[0]); }
+		return sb.toString();
+	}
+
 	private static void append(StringBuilder sb, int n, String label, String unit) {
 		if (n <= 0) return;
 		if (sb.length() > 0) sb.append(" · ");
