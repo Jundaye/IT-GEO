@@ -38,6 +38,7 @@ public class FieldController {
 		model.addAttribute("list", fieldService.getFieldList(userId, gu, tab, q, true));
 		model.addAttribute("doingCnt", fieldService.getFieldList(userId, gu, "doing", null, false).size());
 		model.addAttribute("doneCnt", fieldService.getFieldList(userId, gu, "done", null, false).size());
+		model.addAttribute("naverClientId", naverClientId);
 		return "fieldlist";
 	}
 

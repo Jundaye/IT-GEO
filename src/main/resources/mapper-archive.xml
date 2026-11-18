@@ -108,8 +108,8 @@
 		   AND (<foreach collection="bands" item="bd" separator=" OR ">
 		     <choose>
 		       <when test="bd == '80'">f.vulnerability_score >= 80</when>
-		       <when test="bd == '60'">(f.vulnerability_score >= 60 AND f.vulnerability_score &lt; 80)</when>
-		       <otherwise>(f.vulnerability_score >= 40 AND f.vulnerability_score &lt; 60)</otherwise>
+		       	<when test="bd == '60'">(f.vulnerability_score >= 60 AND f.vulnerability_score &lt; 80)</when>
+				<otherwise>(f.vulnerability_score >= 40 AND f.vulnerability_score &lt; 60)</otherwise>
 		     </choose></foreach>)
 		 </if>
 		 <if test="use != null and use != ''">AND t.use_nm = #{use}</if>
