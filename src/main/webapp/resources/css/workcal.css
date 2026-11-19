@@ -1,0 +1,65 @@
+/* ===== workcal.css : 업무 캘린더 (calendar.do) 전용. 위치 : resources/css/workcal.css
+   달력 색 · 칸 모양은 pages_calendar.css(.fl-calendar) 를 같이 쓰고, 여기는 한 달 보기 · 오른쪽 패널만 ===== */
+.wc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.wc-head h1 { margin: 0 14px 0 0; }
+.wc-nav { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-panel); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer; }
+.wc-nav:hover { background: var(--bg-hover); }
+.wc-title { font-size: 18px; font-weight: 700; min-width: 120px; text-align: center; }
+.wc-legend { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-2); }
+.wc-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.wc-legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.wc-legend em { font-style: normal; padding-left: 14px; border-left: 1px solid var(--line); }
+
+/* 상태 색 : 조사 전 초록 · 조사 중 주황 · 확인 완료 파랑 */
+.st-todo  { --st: #3fb950; }
+.st-doing { --st: #f0a63a; }
+.st-done  { --st: #4a8fe0; }
+.wc-legend i, .wc-row .dot { background: var(--st); }
+
+/* 본문 : 달력 | 오른쪽 패널 */
+.wc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .wc-grid { grid-template-columns: 1fr; } }
+
+/* 한 달 달력 */
+.wc-calendar { margin: 0; padding: 0; overflow: hidden; }
+.wc-calendar .fc-scrollgrid { border-radius: var(--radius); }
+.wc-calendar .fc-daygrid-day-frame { min-height: 104px; }
+.wc-calendar .fc-daygrid-day-top { flex-direction: row; padding: 6px 8px 2px; }
+.wc-calendar .fc-day-other .fc-daygrid-day-number { opacity: .35; }
+.wc-calendar .fc-day-today .fc-daygrid-day-number { background: var(--primary); color: #fff !important; border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; }
+.wc-calendar td.fc-day-today { background: var(--bg-panel) !important; }
+.wc-calendar .fc-daygrid-day { cursor: pointer; }
+.wc-calendar .fc-daygrid-day.wc-sel { box-shadow: inset 0 0 0 2px var(--primary); background: rgba(59, 130, 246, .08) !important; }
+/* 일정 막대 : 어두운 바탕 + 왼쪽 상태 색 줄 */
+.wc-calendar .fc-event { background: rgba(255, 255, 255, .06) !important; border: 0 !important; border-left: 3px solid var(--st, var(--primary)) !important; border-radius: 3px; padding: 2px 6px; margin: 1px 6px 2px !important; }
+.wc-calendar .fc-event.st-todo  { background: rgba(63, 185, 80, .14) !important; }
+.wc-calendar .fc-event.st-doing { background: rgba(240, 166, 58, .16) !important; }
+.wc-calendar .fc-event.st-done  { background: rgba(74, 143, 224, .16) !important; }
+.wc-calendar .fc-event .fc-event-title, .wc-calendar .fc-event .fc-event-main { color: var(--text) !important; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.wc-calendar .fc-daygrid-more-link { font-size: 11px; color: var(--text-2); margin-left: 8px; }
+
+/* 오른쪽 패널 */
+.wc-side { position: sticky; top: 16px; background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.wc-side-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line-soft); }
+.wc-side-head h3 { margin: 0; font-size: 16px; }
+.wc-side-head small { display: block; margin-top: 3px; font-size: 12px; color: var(--text-2); }
+.wc-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+.wc-row:hover, .wc-row.on { background: var(--bg-card); }
+.wc-row .dot { width: 7px; height: 7px; border-radius: 50%; }
+.wc-row .tx b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-row .tx small { font-size: 12px; color: var(--text-2); }
+.wc-row .acts { display: none; gap: 6px; }
+.wc-row.on .acts, .wc-row:hover .acts { display: flex; }
+.wc-row.on .st-badge, .wc-row:hover .st-badge { display: none; }
+.wc-row .wc-del { color: var(--danger, #f05252); }
+.st-badge { font-size: 11px; padding: 3px 7px; border-radius: 3px; color: var(--st); background: color-mix(in srgb, var(--st) 16%, transparent); white-space: nowrap; }
+.wc-bld { padding: 12px 16px 6px; }
+.wc-bld .cap { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+.wc-b { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.wc-b:last-child { border-bottom: 0; }
+.wc-b .tx b { display: block; font-size: 14px; font-weight: 600; }
+.wc-b .tx small { font-size: 12px; color: var(--text-2); }
+.wc-b .sc { text-align: right; flex: 0 0 auto; }
+.wc-b .sc b { display: block; font-size: 17px; font-weight: 700; color: #f05252; }
+.wc-b .sc small { font-size: 11px; color: var(--text-3, #777); }
+.wc-empty { padding: 16px; font-size: 13px; color: var(--text-2); line-height: 1.5; }

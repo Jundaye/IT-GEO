@@ -1,5 +1,6 @@
 package wellfair.controller;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,22 @@ public class FieldController {
 		model.addAttribute("naverClientId", naverClientId);
 		return "fieldlist";
 	}
+	
+	//캘린더화면
+	@GetMapping("calendar.do")
+	public String calendar(HttpSession session, Model model) {
+		long userId = userId(session);
+		String gu = userGu(session);
+		List<Object> lists = new ArrayList<>();
+		lists.addAll(fieldService.getFieldList(userId, gu, "doing", null, true));
+		lists.addAll(fieldService.getFieldList(userId, gu, "done", null, true));
+		model.addAttribute("lists", lists);
+		return "calendar";
+	}
+
+// 파일 맨 위 import 에 없으면 추가
+// import java.util.ArrayList;
+// import java.util.List;
 
 	// GET fieldedit.do?listId (0 = 새 리스트)
 	@GetMapping("fieldedit.do")
