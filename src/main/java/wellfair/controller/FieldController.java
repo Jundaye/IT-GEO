@@ -1,5 +1,6 @@
 package wellfair.controller;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +39,20 @@ public class FieldController {
 		model.addAttribute("list", fieldService.getFieldList(userId, gu, tab, q, true));
 		model.addAttribute("doingCnt", fieldService.getFieldList(userId, gu, "doing", null, false).size());
 		model.addAttribute("doneCnt", fieldService.getFieldList(userId, gu, "done", null, false).size());
+		model.addAttribute("naverClientId", naverClientId);   // 리스트 카드 약도 (네이버 지도)
 		return "fieldlist";
+	}
+
+	// GET calendar.do : 업무 캘린더 (진행중 + 완료 리스트를 왼쪽에 깔고 달력에 끌어다 놓기)
+	@GetMapping("calendar.do")
+	public String calendar(HttpSession session, Model model) {
+		long userId = userId(session);
+		String gu = userGu(session);
+		List<Object> lists = new ArrayList<>();
+		lists.addAll(fieldService.getFieldList(userId, gu, "doing", null, true));
+		lists.addAll(fieldService.getFieldList(userId, gu, "done", null, true));
+		model.addAttribute("lists", lists);
+		return "calendar";
 	}
 
 	// GET fieldedit.do?listId (0 = 새 리스트)

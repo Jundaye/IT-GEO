@@ -1,6 +1,6 @@
 <%--
   공통 상단 헤더 : 로고 · 탭 4개 · "부서 · 이름 직급" · 로그아웃
-  include 하기 전에 activeMenu 를 정한다 : map | field | archive | dashboard
+  include 하기 전에 activeMenu 를 정한다 : map | field | calendar | archive | dashboard
   loginMember 는 세션(LoginController 가 넣음)
 --%>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
@@ -13,6 +13,7 @@
   <nav class="gnb">
     <a href="${ctx}/map.do"       class="${activeMenu == 'map' ? 'active' : ''}">취약공간 분석 지도</a>
     <a href="${ctx}/fieldlist.do" class="${activeMenu == 'field' ? 'active' : ''}">현장 확인 리스트</a>
+    <a href="${ctx}/calendar.do"  class="${activeMenu == 'calendar' ? 'active' : ''}">업무 캘린더</a>
     <a href="${ctx}/archive.do"   class="${activeMenu == 'archive' ? 'active' : ''}">보관함</a>
     <a href="${ctx}/dashboard.do" class="${activeMenu == 'dashboard' ? 'active' : ''}">대시보드</a>
   </nav>
@@ -25,8 +26,8 @@
       <button type="button" class="btn btn-line btn-sm du-open" id="btnDataUpdate" data-tip="원천 파일이 바뀌었으면 건물 데이터를 다시 계산합니다.">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.4L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.4l1.7-1.9"/><path d="M20 20v-4.5h-4.5"/></svg><span id="duBtnText">데이터 업데이트</span><i class="du-hbar" id="duHbar"></i></button>
     </c:if>
-    <%-- 캘린더 : 빈 버튼. 나중에 "내 업무 일정" 페이지로 연결 (클릭은 common.js 가 막는다) --%>
-    <a href="#" class="icon-btn" id="btnCalendar" aria-label="내 업무 일정" data-tip="내 업무 일정 (준비 중)">
+    <%-- 캘린더 : 업무 캘린더(calendar.do)로 이동. id 를 btnCalendar 에서 바꿔서 common.js 의 클릭 막기에 안 걸리게 함 --%>
+    <a href="${ctx}/calendar.do" class="icon-btn" id="btnCalendarGo" aria-label="내 업무 일정" data-tip="내 업무 일정">
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="1"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></a>
     <span class="icon-btn" id="btnHelp" tabindex="0" aria-label="도움말" data-tip="위험요인을 고르고 '분석 실행'을 누르면 지금 보이는 지도 범위에서 찾아줍니다.">
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.3v.1"/></svg></span>
