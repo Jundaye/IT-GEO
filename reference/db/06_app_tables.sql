@@ -1,5 +1,5 @@
 -- =====================================================================
--- WellFAIR 앱 테이블 통합본 (2026-11-18)  01 ~ 05 다음에 실행
+-- ITGEO 앱 테이블 통합본 (2026-11-18)  01 ~ 05 다음에 실행
 --   06_app_tables.sql(설계안) + 2026-11-18 DDL(모바일 앱 실제 저장용)을 합친 것
 --   원칙 : 앱 코드가 실제로 쓰는 테이블(survey_record_detail, survey_photo)은 그대로 살리고,
 --          06에서 겹치지 않는 것만 가져온다. 겹치던 survey_bld_check / survey_hh_check / attachment 는 뺀다.
@@ -11,7 +11,7 @@
 --     [F] survey_schedule      : 달력                                         (06 [G])
 --   [A][B]는 ALTER 라서 여러 번 실행하면 오류. 나머지는 IF NOT EXISTS
 -- =====================================================================
-USE wellfair;
+USE itgeo;
 SET SQL_SAFE_UPDATES = 0;
 
 -- [A] 방문이력 : 방문 호실 FK
@@ -117,7 +117,7 @@ SET SQL_SAFE_UPDATES = 1;
 
 -- 확인
 SELECT table_name, table_comment FROM information_schema.tables
- WHERE table_schema = 'wellfair'
+ WHERE table_schema = 'itgeo'
    AND table_name IN ('survey_record_detail','field_report','survey_photo','survey_schedule');
 
 /* ---------- 되돌리기 ----------

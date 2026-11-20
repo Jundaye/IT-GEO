@@ -1,5 +1,5 @@
 -- =====================================================================
--- wellfair : 주사위(WellFAIR) 중간점검 DB  (MySQL 8)
+-- itgeo : 잇지오(IT-GEO) DB  (MySQL 8)
 -- 팀원 초안 기준으로 아래만 고침
 --   [1] bld_id  BIGINT → VARCHAR(28)   (실제 값이 28자리라 BIGINT 범위 초과)
 --   [2] building 컬럼 = 3gu_bld_db.csv 35개 그대로 (11/16 +rent_yn, narrow_rd, strct_nm, ugrnd_units) (객실수·고시원추정은 units에 합산, 업소종류는 sp_type)
@@ -13,10 +13,11 @@
 --       (더미에서 같은 가구 안에서도 사람마다 값이 달라서 가구 1줄로 못 담음)
 --   [10] residency 의미없는 UNIQUE(residency_id, bld_id) 삭제 → UNIQUE(hh_id) (가구당 거주지 1곳)
 --   [11] visit_history + user_id
+--   [12] 더미 v9 소득·연금·체납·보험 36컬럼 : 가구 안에서 값이 같은 8개는 household, 나머지 28개는 person (11/20)
 -- =====================================================================
 
-CREATE DATABASE IF NOT EXISTS wellfair DEFAULT CHARACTER SET utf8mb4;
-USE wellfair;
+CREATE DATABASE IF NOT EXISTS itgeo DEFAULT CHARACTER SET utf8mb4;
+USE itgeo;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS survey_schedule;        -- 06_app_tables.sql 에서 만드는 테이블 4개
@@ -129,6 +130,15 @@ CREATE TABLE household (
   risk_grade        VARCHAR(10)     NULL COMMENT '위험_등급',
   blind_spot_yn     CHAR(1)         NULL COMMENT '복지사각지대_해당여부',
   blind_spot_type   VARCHAR(10)     NULL COMMENT '사각지대_유형',
+  -- [12] 가구 단위 (더미에서 가구 안 값이 모두 같음)
+  eitc_yn               CHAR(1)         NULL COMMENT '근로장려금_수급여부',
+  eitc_amt              INT             NULL COMMENT '근로장려금_지급액',
+  ctc_yn                CHAR(1)         NULL COMMENT '자녀장려금_수급여부',
+  ctc_amt               INT             NULL COMMENT '자녀장려금_지급액',
+  recog_inc_mon_amt     INT             NULL COMMENT '소득인정액_월',
+  med_inc_ratio         DECIMAL(6,3)    NULL COMMENT '기준중위소득_대비',
+  elec_arrears_yn       CHAR(1)         NULL COMMENT '전기요금_체납_여부',
+  gas_dc_type           VARCHAR(10)     NULL COMMENT '가스요금_감면유형',
   created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (hh_id),
   KEY idx_household_sgg (sgg_cd)
@@ -158,6 +168,35 @@ CREATE TABLE person (
   detect_result     VARCHAR(10)     NULL COMMENT '발굴_처리결과',
   non_target_rsn    VARCHAR(20)     NULL COMMENT '비대상_사유',
   support_type      VARCHAR(10)     NULL COMMENT '지원연계_유형',
+  -- [12] 소득·연금·체납·보험 (사람 단위)
+  vet_type              VARCHAR(20)     NULL COMMENT '보훈대상구분',
+  vet_rel_type          VARCHAR(4)      NULL COMMENT '보훈_본인유족구분',
+  vet_mon_amt           INT             NULL COMMENT '보훈급여_월액',
+  wage_tot_amt          BIGINT          NULL COMMENT '근로소득_총급여',
+  biz_close_yn          CHAR(1)         NULL COMMENT '폐업이력_여부',
+  biz_close_ind_nm      VARCHAR(20)     NULL COMMENT '폐업업태',
+  biz_open_day          CHAR(8)         NULL COMMENT '개업일자',
+  biz_close_day         CHAR(8)         NULL COMMENT '폐업일자',
+  gi_rpt_yn             CHAR(1)         NULL COMMENT '종합소득_신고여부',
+  gi_amt                BIGINT          NULL COMMENT '종합소득금액',
+  nps_type              VARCHAR(10)     NULL COMMENT '국민연금_수급구분',
+  nps_mon_amt           INT             NULL COMMENT '국민연금_월액',
+  natl_tax_arrears_yn   CHAR(1)         NULL COMMENT '국세체납_여부',
+  natl_tax_arrears_amt  BIGINT          NULL COMMENT '국세체납액',
+  natl_tax_cert_yn      CHAR(1)         NULL COMMENT '납세증명_발급가능여부',
+  local_tax_arrears_yn  CHAR(1)         NULL COMMENT '지방세체납_여부',
+  local_tax_arrears_amt INT             NULL COMMENT '지방세체납액',
+  local_tax_cert_yn     CHAR(1)         NULL COMMENT '지방세납세증명_발급가능여부',
+  ei_insured_yn         CHAR(1)         NULL COMMENT '고용보험_피보험자여부',
+  ei_loss_day           CHAR(8)         NULL COMMENT '고용보험_상실일자',
+  ui_yn                 CHAR(1)         NULL COMMENT '실업급여_수급여부',
+  ui_mon_amt            INT             NULL COMMENT '실업급여_월지급액',
+  near_poor_copay_yn    CHAR(1)         NULL COMMENT '차상위_본인부담경감_여부',
+  dsbl_pension_type     VARCHAR(10)     NULL COMMENT '장애인연금수당_구분',
+  dsbl_pension_mon_amt  INT             NULL COMMENT '장애인연금수당_월액',
+  nhis_qual_type        VARCHAR(10)     NULL COMMENT '건강보험_자격구분',
+  nhis_qual_chg_day     CHAR(8)         NULL COMMENT '건강보험_자격변동일자',
+  nhis_prem_mon_amt     INT             NULL COMMENT '건보료_월액',
   PRIMARY KEY (mbr_id),
   KEY idx_person_hh (hh_id),
   CONSTRAINT fk_person_household
