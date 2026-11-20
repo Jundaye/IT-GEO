@@ -88,7 +88,7 @@
 
 	<!-- 구·동 선택 목록 -->
 	<!-- 법정동 목록 (+ 건물 범위). gu 가 있으면 그 구만 -->
-	<select id="getDongList" parameterType="String" resultType="wellfair.to.DongTO">
+	<select id="getDongList" parameterType="String" resultType="itgeo.to.DongTO">
 		SELECT sgg_cd, emd_nm, AVG(lat) lat, AVG(lng) lng, COUNT(*) cnt
 		     , MIN(lat) min_lat, MIN(lng) min_lng, MAX(lat) max_lat, MAX(lng) max_lng
 		  FROM building
@@ -99,7 +99,7 @@
 
 	<!-- 법정동 → 행정동 쌍 (5-1 동 선택 2단계). 행정동은 03_adm_dong.sql 이 좌표 공간조인으로 붙였다.
 	     경계 오차로 다른 구 행정동이 붙은 건물(125쌍 중 9쌍, 예: 구로구 개봉동 → 신정3동)은 코드 앞 5자리(구)로 거른다 -->
-	<select id="getAdmList" parameterType="String" resultType="wellfair.to.DongTO">
+	<select id="getAdmList" parameterType="String" resultType="itgeo.to.DongTO">
 		SELECT sgg_cd, emd_nm, adm_cd, adm_nm, AVG(lat) lat, AVG(lng) lng, COUNT(*) cnt
 		     , MIN(lat) min_lat, MIN(lng) min_lng, MAX(lat) max_lat, MAX(lng) max_lng
 		  FROM building
@@ -115,12 +115,12 @@
 	</sql>
 
 	<!-- 구 경계 계산용 좌표 (앱에서 한 번만 읽어 볼록 껍질을 만든다) -->
-	<select id="getCoordList" resultType="wellfair.to.DongTO">
+	<select id="getCoordList" resultType="itgeo.to.DongTO">
 		SELECT sgg_cd, lng, lat FROM building
 	</select>
 
 	<!-- 구 단위 요약 : 구마다 전체 · 기준점 이상 건물 수 ("위험 N곳") -->
-	<select id="getGuSummary" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.GuTO">
+	<select id="getGuSummary" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.GuTO">
 		SELECT t.sgg_cd, AVG(t.lat) lat, AVG(t.lng) lng, COUNT(*) total, SUM(t.score >= #{scoreMin}) risk_count, SUM(t.checked) checked_cnt
 		  FROM (<include refid="mapper-building.scoredSelect"/>) t
 		 GROUP BY t.sgg_cd
@@ -130,7 +130,7 @@
 	<!-- 격자 묶음 (살피구로 AnalysisService.clusters() 와 같은 결과를 SQL 로)
 	     bbox 로 먼저 거르고(idx_building_coords), 칸 = FLOOR(lng/cell), FLOOR(lat/cellLat).
 	     hist = 점수 구간별 건물 수 (80+, 60~79, 40~59, 40 미만), risk_count = scoreMin 이상 -->
-	<select id="getClusterList" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.ClusterTO">
+	<select id="getClusterList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.ClusterTO">
 		SELECT FLOOR(t.lng / #{cell})    ix
 		     , FLOOR(t.lat / #{cellLat}) iy
 		     , COUNT(*)                  size
@@ -154,7 +154,7 @@
 	</select>
 
 	<!-- 확대 : bbox 안 건물 핀 (점수 높은 순 · 동점 순서, 최대 limit) -->
-	<select id="getMarkerList" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.BuildingMarkerTO">
+	<select id="getMarkerList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.BuildingMarkerTO">
 		SELECT t.bld_id, t.lat, t.lng, t.score, t.bld_nm, t.addr, t.use_nm, t.vuln_hh_cnt, t.checked
 		  FROM (
 			<include refid="mapper-building.scoredSelect"/>
@@ -166,7 +166,7 @@
 	</select>
 
 	<!-- 현장 확인된 건물 (visit_history, 사용자 무관). 기간 = checkedMonths. 핀 모드에서 점수 기준 아래라 핀이 없는 건물만 파란 체크 점으로 (map-marker.js) -->
-	<select id="getCheckedList" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.BuildingMarkerTO">
+	<select id="getCheckedList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.BuildingMarkerTO">
 		SELECT b.bld_id, b.lat, b.lng, b.bld_nm, b.addr, 0 score, 1 checked
 		     , DATE_FORMAT(MAX(vh.visited_at), '%Y-%m-%d') checked_at
 		  FROM visit_history vh
@@ -178,7 +178,7 @@
 	</select>
 
 	<!-- 결과 리스트 : 건수 -->
-	<select id="getResultCount" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="int">
+	<select id="getResultCount" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="int">
 		SELECT COUNT(*)
 		  FROM (
 			<include refid="mapper-building.scoredSelect"/>
@@ -190,7 +190,7 @@
 	</select>
 
 	<!-- 결과 리스트 : 한 페이지 -->
-	<select id="getResultList" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.BuildingTO">
+	<select id="getResultList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.BuildingTO">
 		SELECT t.bld_id, t.sgg_cd, t.emd_nm, t.addr, t.bld_nm, t.use_nm, t.grnd_flr, t.ugrnd_flr, t.lat, t.lng
 		     , t.score, t.bld_age, t.vuln_hh_cnt, t.priority_sum
 		     , t.pt_ugrnd, t.pt_gosiwon, t.pt_rooftop, t.pt_viol, t.pt_old, t.pt_flood, t.pt_low, t.pt_cheap
@@ -212,7 +212,7 @@
 	</select>
 
 	<!-- 건물 상세 (점수 + 현장 확인 여부 + 내 보관함 여부) -->
-	<select id="getBuilding" parameterType="wellfair.to.AnalysisCriteriaTO" resultType="wellfair.to.BuildingTO">
+	<select id="getBuilding" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.BuildingTO">
 		SELECT t.*
 		     , <include refid="mapper-building.factorText"/> factor_text
 		     , (SELECT DATE_FORMAT(MAX(vh.visited_at), '%Y-%m-%d')

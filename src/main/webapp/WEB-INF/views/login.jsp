@@ -11,7 +11,7 @@
   <%-- 왼쪽 : 브랜드 소개 --%>
   <section class="login-visual">
     <div class="login-visual-body">
-      <h1 class="login-logo"><span class="brand-logo"><span class="b1">Well</span><span class="b2">FAIR</span></span></h1>
+      <h1 class="login-logo"><span class="brand-logo"><span class="b1">IT</span><span class="b2">GEO</span></span></h1>
       <p class="login-sub">주거 취약공간 분석 플랫폼</p>
       <p class="login-desc">개인정보 없이 공간 데이터만으로 비적정 주거 건물을 찾고, 현장 확인 결과로 분석을 다시 고칩니다.</p>
       <ul class="login-points">

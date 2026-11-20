@@ -153,9 +153,9 @@
 .fl-item:hover { background: var(--bg-hover); }
 .num { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; flex: 0 0 24px; }
 .num.done { background: var(--bg-card); border: 1px solid var(--line); color: var(--text-2); }
-.fl-item .ti { flex: 1; }
-.fl-item .ti b { font-size: 14px; font-weight: 600; display: block; }
-.fl-item .ti span { display: block; font-size: 12px; line-height: 17px; color: var(--text-2); }
+.fl-item .ti { flex: 1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.fl-item .ti b { font-size: 16px; font-weight: 600; }
+.fl-item .ti span { font-size: 12px; line-height: 17px; color: var(--text-2); }
 .fl-item .sc { font-size: 15px; font-weight: 700; }
 .fl-new { display: grid; place-items: center; height: 80px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--text-2); font-size: 22px; }
 .fl-new:hover { color: var(--primary); border-color: var(--primary); }

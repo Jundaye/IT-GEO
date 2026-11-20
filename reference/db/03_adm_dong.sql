@@ -4,7 +4,7 @@
 --   72,961동 전부 매칭 (경계선 위 42동은 가장 가까운 행정동). 3개 구 행정동 52개
 -- 01 → 02 다음에 실행
 -- =====================================================================
-USE wellfair;
+USE itgeo;
 SET SQL_SAFE_UPDATES = 0;   -- Workbench 안전 모드(Error 1175) 끄기
 
 ALTER TABLE building
@@ -15,7 +15,7 @@ ALTER TABLE building
 DROP TABLE IF EXISTS stg_adm;
 CREATE TABLE stg_adm (bld_id VARCHAR(28) PRIMARY KEY, adm_cd CHAR(10), adm_nm VARCHAR(20)) DEFAULT CHARSET=utf8mb4;
 
-LOAD DATA LOCAL INFILE 'C:/final_data/jusawi_handoff/reference/db/bld_adm_dong.csv' INTO TABLE stg_adm
+LOAD DATA LOCAL INFILE 'C:/final_data/itgeo_db/bld_adm_dong.csv' INTO TABLE stg_adm
   CHARACTER SET utf8mb4 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n' IGNORE 1 LINES
   (bld_id, adm_cd, @adm_nm) SET adm_nm = TRIM(TRAILING '\r' FROM @adm_nm);
 

@@ -1,4 +1,4 @@
-/* 지역 선택 경계 (WellFAIR)
+/* 지역 선택 경계 (ITGEO)
    - GU_DONG_BOUNDARY : 법정동 경계 (도로명주소 법정동 경계를 2026 구 경계에 맞춰 자름)
    - GU_ADM_BOUNDARY  : 행정동 경계 (통계청 행정동 경계 2026-07)
    - 구 경계는 gu-boundary.js 의 GU_BOUNDARY

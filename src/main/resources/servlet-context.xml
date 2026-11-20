@@ -34,14 +34,14 @@
   		<exclude-mapping path="/loginform.do"/>
   		<exclude-mapping path="/login.do"/>
   		<exclude-mapping path="/logout.do"/>
-  		<beans:bean class="wellfair.interceptor.LoginInterceptor"></beans:bean>
+  		<beans:bean class="itgeo.interceptor.LoginInterceptor"></beans:bean>
   	</interceptor>
   </interceptors>
 
   <!-- @Value("${app.xxx}") 는 컨텍스트마다 따로 풀린다. Controller 가 이 컨텍스트에 있으므로 여기에도 둔다 -->
   <context:property-placeholder location="classpath:app.properties" file-encoding="UTF-8"/>
 
-  <context:component-scan base-package="wellfair" />
+  <context:component-scan base-package="itgeo" />
   <aop:aspectj-autoproxy></aop:aspectj-autoproxy>
   <!-- @Transactional (FieldService.saveField · addItems). transactionManager 는 root-context -->
   <tx:annotation-driven transaction-manager="transactionManager" proxy-target-class="true"/>

@@ -1,5 +1,5 @@
 <%--
-  데이터 업데이트 모달 (2차 지시문 E, 시안 : design_WellFAIR/데이터업데이트_모달_실행중.png · _완료.png)
+  데이터 업데이트 모달 (2차 지시문 E, 시안 : design_ITGEO/데이터업데이트_모달_실행중.png · _완료.png)
   header.jspf 끝에서 include (서울시청 계정만). 동작은 js/dataupdate-modal.js, 모양은 common.css 의 .du-*
   상태 3가지 : 대기(#duIdle) / 실행 중 · 완료(#duRun, 완료면 .du-modal 에 done)
 --%>

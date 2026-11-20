@@ -24,7 +24,7 @@
 	</sql>
 
 	<!-- 내 리스트 목록. tab = doing(진행중) | done(완료됨). gu 가 있으면 그 구 리스트만 (구청 계정) -->
-	<select id="getFieldList" resultType="wellfair.to.FieldListTO">
+	<select id="getFieldList" resultType="itgeo.to.FieldListTO">
 		SELECT * FROM (<include refid="listSelect"/> WHERE s.user_id = #{userId}
 		  <if test="q != null and q != ''">AND s.title LIKE CONCAT('%', #{q}, '%')</if>) x
 		<where>
@@ -36,7 +36,7 @@
 	</select>
 
 	<!-- 리스트 1개 (내 것만, 구청 계정은 소속 구 것만) -->
-	<select id="getField" resultType="wellfair.to.FieldListTO">
+	<select id="getField" resultType="itgeo.to.FieldListTO">
 		SELECT * FROM (<include refid="listSelect"/> WHERE s.survey_id = #{surveyId} AND s.user_id = #{userId}) x
 		<if test="gu != null and gu != ''">WHERE (x.sgg_cd = #{gu} OR x.sgg_cd IS NULL)</if>
 	</select>
@@ -63,12 +63,12 @@
 		SELECT title FROM survey_list WHERE user_id = #{userId} AND title LIKE CONCAT(#{prefix}, '%')
 	</select>
 
-	<insert id="addField" parameterType="wellfair.to.FieldListTO" useGeneratedKeys="true" keyProperty="surveyId">
+	<insert id="addField" parameterType="itgeo.to.FieldListTO" useGeneratedKeys="true" keyProperty="surveyId">
 		INSERT INTO survey_list (user_id, sgg_cd, title, move_mode) VALUES (#{userId}, #{sggCd}, #{title}, IFNULL(#{moveMode}, 'WALK'))
 	</insert>
 
 	<!-- 제목 · 이동수단 수정. 구가 아직 없던 옛 리스트는 이번에 정해진 구를 채운다 -->
-	<update id="updateField" parameterType="wellfair.to.FieldListTO">
+	<update id="updateField" parameterType="itgeo.to.FieldListTO">
 		UPDATE survey_list
 		   SET title = #{title}, sgg_cd = IFNULL(sgg_cd, #{sggCd}), move_mode = IFNULL(#{moveMode}, move_mode)
 		 WHERE survey_id = #{surveyId} AND user_id = #{userId}
@@ -80,7 +80,7 @@
 	</update>
 
 	<!-- 리스트 항목 (방문 순서대로) -->
-	<select id="getFieldItemList" resultType="wellfair.to.FieldItemTO">
+	<select id="getFieldItemList" resultType="itgeo.to.FieldItemTO">
 		SELECT p.plan_id, p.survey_id, p.factor_id, f.bld_id, p.visit_order, DATE_FORMAT(p.plan_date, '%Y-%m-%d') plan_date
 		     , b.addr, b.bld_nm, b.use_nm, b.emd_nm, b.sgg_cd, b.useapr_day, b.grnd_flr, b.ugrnd_flr, b.lat, b.lng
 		     , b.welf_nm, b.welf_dist, b.hosp_nm, b.hosp_dist
@@ -131,18 +131,18 @@
 	</insert>
 
 	<!-- 확인 완료 : 방문 1건 + 기록 1건 -->
-	<insert id="addVisit" parameterType="wellfair.to.FieldCheckTO" useGeneratedKeys="true" keyProperty="visitId">
+	<insert id="addVisit" parameterType="itgeo.to.FieldCheckTO" useGeneratedKeys="true" keyProperty="visitId">
 		INSERT INTO visit_history (user_id, bld_id, visited_at, result)
 		VALUES (#{userId}, #{bldId}, IFNULL(#{visitedAt}, NOW()), #{result})
 	</insert>
 	<!-- 05 현장 체크(factor_check JSON) · 점수 보정(score_adj)은 archivecheck.do 에서만 채운다 -->
-	<insert id="addRecord" parameterType="wellfair.to.FieldCheckTO" useGeneratedKeys="true" keyProperty="recordId">
+	<insert id="addRecord" parameterType="itgeo.to.FieldCheckTO" useGeneratedKeys="true" keyProperty="recordId">
 		INSERT INTO survey_record (plan_id, visit_id, content, factor_check, score_adj)
 		VALUES (#{planId}, #{visitId}, #{content}, #{factorCheck}, #{scoreAdj})
 	</insert>
 
 	<!-- 리스트 수정 화면 왼쪽 : 내 보관함 건물 전부 (+ 어느 리스트에 담겼는지). gu 가 있으면 그 구 건물만 -->
-	<select id="getPickList" resultType="wellfair.to.ArchiveRowTO">
+	<select id="getPickList" resultType="itgeo.to.ArchiveRowTO">
 		SELECT f.factor_id, f.vulnerability_id, l.title, f.bld_id, b.sgg_cd, b.emd_nm, b.addr, b.bld_nm, b.use_nm, b.lat, b.lng
 		     , CAST(f.vulnerability_score AS SIGNED) score
 		     , IFNULL(rs.vuln_hh_cnt, 0) vuln_hh_cnt, IFNULL(rs.priority_sum, 0) priority_sum

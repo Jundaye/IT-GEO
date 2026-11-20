@@ -4,7 +4,11 @@
 <mapper namespace="mapper-schedule">
 
 	<!-- 내 달력 (풀캘린더가 보내는 start ~ end 범위, end 는 그 날 미포함) -->
+<<<<<<< HEAD
 	<select id="selectMyEvents" resultType="wellfair.to.ScheduleEventTO">
+=======
+	<select id="selectMyEvents" resultType="itgeo.to.ScheduleEventTO">
+>>>>>>> refs/remotes/origin/main
 		SELECT s.schedule_id                          AS id,
 		       l.title                                AS title,
 		       DATE_FORMAT(s.sched_date, '%Y-%m-%d')  AS start,

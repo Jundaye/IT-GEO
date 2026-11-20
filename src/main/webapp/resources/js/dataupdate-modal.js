@@ -3,7 +3,7 @@
  *  - 예전 dataupdate.jsp 의 로직(run.do POST → 1초마다 job.do 폴링, showMode · showSteps · showReport)을 여기로 옮겼다.
  *    dataupdate.do 화면도 이 파일을 쓴다 (window.DU_AUTO_OPEN = true 로 모달을 바로 연다) → 로직은 한 곳
  *  - 상태 3가지 : 대기(마지막 실행 요약 + 시작 버튼) / 실행 중(진행률 · 단계 · 변경 사항 피드) / 완료(결과 한 줄 · 숫자 카드 · 요약 표)
- *  - 백그라운드 : 실행 중에 닫아도 폴링은 계속. jobId 를 sessionStorage wf.duJob 에 두어 다른 화면으로 가도 이어진다.
+ *  - 백그라운드 : 실행 중에 닫아도 폴링은 계속. jobId 를 sessionStorage itgeo.duJob 에 두어 다른 화면으로 가도 이어진다.
  *    그동안 헤더 버튼 = "데이터 업데이트 46%" + 아래 진행 막대. 끝나면 버튼을 되돌린다 (헤더의 데이터 기준 시각 표시는 없앴다)
  *  - 배치 서버가 아직 안 주는 값 (지시문 E-4) : feed · report.diff. 없으면 그 칸만 빠진다
  *      feed 없음 → log 의 단계 완료를 "확인" 태그로 쌓는다 / report.diff 없음 → 새로 위험 · 내려감 카드와 [지도에서 보기] 를 숨긴다
@@ -24,8 +24,14 @@ $(function () {
   function ssDel(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
   function ssJson(k) { try { return JSON.parse(ssGet(k) || '{}') || {}; } catch (e) { return {}; } }
 
-  var jobId = ssGet('wf.duJob');      // 실행 중인 작업 (없으면 null)
-  var timer = null;
+  var jobId = ssGet('itgeo.duJob');      // 실행 중인 작업 (없으면 null)
+  var timer = null;                   // 다음 조회 예약 (setTimeout)
+  var polling = false;                // 조회를 이어 가는 중
+  var finished = false;               // finish() 는 작업 하나에 한 번만
+  var failN = 0;                      // 조회 연속 실패 횟수
+  var lost = false;                   // 연속 FAIL_MAX 회 실패 → 조회를 멈춤 (jobId · itgeo.duJob 은 남겨 두어 새로고침하면 이어서 본다)
+  var FAIL_MAX = 5;
+  var LOST_MSG = '연결이 끊겼습니다. 새로고침하면 다시 확인합니다';
   var last = null;                    // 마지막으로 받은 작업 상태
   var view = 'idle';                  // idle | run | done
   var feedN = 0;                      // 피드에 이미 그린 줄 수
@@ -65,12 +71,12 @@ $(function () {
   function feedOf(s) {
     if ($.isArray(s.feed)) return s.feed;                       // 배치 서버가 주면 그대로
     /* 없으면 단계 완료를 "확인" 으로 대신. 시각은 이 화면이 그 단계를 처음 본 때 (sessionStorage 에 기억 → 다른 화면에서도 같은 시각) */
-    var seen = ssJson('wf.duFeedT'), dirty = false, out = [];
+    var seen = ssJson('itgeo.duFeedT'), dirty = false, out = [];
     function at(key) { if (!seen[key]) { seen[key] = hms(Date.now()); dirty = true; } return seen[key]; }
     if (s.mode === 'partial' && (s.changed || []).length) out.push({ time: at('#changed'), kind: 'check', text: '원천 파일 확인 · ' + s.changed.join(', ') + ' 바뀜' });
     if (s.mode === 'partial' && (s.skipped || []).length) out.push({ time: at('#skipped'), kind: 'check', text: s.skipped.join(' · ') + ' 변경 없음 → 건너뜀' });
     $.each(s.log || [], function (i, x) { out.push({ time: at(i + ':' + x.step), kind: 'check', text: x.step + ' 완료 (' + x.sec + '초)' }); });
-    if (dirty) ssSet('wf.duFeedT', JSON.stringify(seen));
+    if (dirty) ssSet('itgeo.duFeedT', JSON.stringify(seen));
     return out;
   }
   function renderFeed(s, reset) {
@@ -146,7 +152,7 @@ $(function () {
   function renderDone(s) {
     setView('done');
     var r = s.report || {}, res = resultOf(s), diff = r.diff || null, u = r.db_update || {};
-    var t0 = ssGet('wf.duT0'), t1 = ssGet('wf.duT1');
+    var t0 = ssGet('itgeo.duT0'), t1 = ssGet('itgeo.duT1');
     var sec = (s.log || []).reduce(function (a, x) { return a + (Number(x.sec) || 0); }, 0);
     var when = [(t0 && t1) ? hms(t0) + ' ~ ' + hms(t1) : '', sec ? durText(sec) : ''].filter(Boolean).join(' · ');
     $m.find('.du-modal').addClass(res.kind === 'fail' ? 'fail' : 'ok');
@@ -206,28 +212,47 @@ $(function () {
     $('#duHbar').css('width', 0);
   }
 
-  /* ---------- 폴링 (1초) ---------- */
-  function stopPoll() { clearInterval(timer); timer = null; }
+  /* ---------- 폴링 : 응답을 받은 뒤 1초 뒤에 다음 조회 (체인). 앞 요청이 끝나기 전에 다음 요청을 보내지 않으므로
+       늦게 온 '실행 중' 응답이 '완료' 화면을 되돌리는 일이 없다 (리뷰 3) ---------- */
+  function errMsg(x, def) { var j = (x && x.responseJSON) || {}; return j.message || j.msg || def; }
+  function stopPoll() { clearTimeout(timer); timer = null; polling = false; }
+  function next() { clearTimeout(timer); timer = setTimeout(poll, 1000); }
   function poll() {
-    if (!jobId) return;
-    $.ajax({ url: Common.url('api/dataupdate/job.do'), data: { id: jobId }, dataType: 'json' }).done(function (s) {
+    if (!jobId || !polling) return;
+    var my = jobId;
+    $.ajax({ url: Common.url('api/dataupdate/job.do'), data: { id: my }, dataType: 'json' }).done(function (s) {
+      if (my !== jobId || !polling) return;                   // 그 사이 멈췄거나 다른 작업
+      failN = 0;
       last = s;
-      if (s.status === 'running') { headerRun(s); if ($m.hasClass('open')) renderRun(s); return; }
+      if (s.status === 'running') { headerRun(s); if ($m.hasClass('open')) renderRun(s); next(); return; }
       finish(s);
-    }).fail(function (x) {                                    // 배치 서버가 중간에 꺼지면 조회를 멈춘다
-      stopPoll(); jobId = null; ssDel('wf.duJob'); headerIdle();
-      var msg = (x.responseJSON || {}).msg || '진행 상황을 읽지 못했습니다.';
-      if ($m.hasClass('open')) { renderIdle(null); $('#duLast').text('진행 상황을 이어서 볼 수 없습니다.'); showErr(msg); }
+    }).fail(function (x) {
+      if (my !== jobId || !polling) return;
+      /* 404 = 배치 서버가 다시 켜져 그 작업 기록이 없어졌다 (다시 물어도 같음) → 이 작업 추적은 끝낸다 */
+      if (x.status === 404) {
+        stopPoll(); jobId = null; ssDel('itgeo.duJob'); headerIdle();
+        if ($m.hasClass('open')) { renderIdle(null); $('#duLast').text('진행 상황을 이어서 볼 수 없습니다.'); showErr(errMsg(x, '작업 기록이 없습니다.')); }
+        return;
+      }
+      /* 그 밖의 실패(배치 서버 잠깐 꺼짐 · 응답 늦음 · 네트워크)는 다시 묻는다. 연속 FAIL_MAX 회면 멈추고 안내만 (리뷰 4).
+         작업은 배치 서버에서 계속 돌고 있을 수 있으므로 jobId · itgeo.duJob 은 지우지 않는다 → 새로고침하면 다시 이어서 본다 */
+      failN++;
+      if (failN < FAIL_MAX) { next(); return; }
+      stopPoll(); lost = true;
+      if ($m.hasClass('open')) showErr(LOST_MSG); else Common.toast('데이터 업데이트 : ' + LOST_MSG);
     });
   }
-  function startPoll() { stopPoll(); headerRun(last); poll(); timer = setInterval(poll, 1000); }
+  function startPoll() { stopPoll(); polling = true; finished = false; failN = 0; lost = false; headerRun(last); poll(); }
   function finish(s) {
+    if (finished) return;                                     // 한 번만 (리뷰 3)
+    finished = true;
+    console.log('[dataupdate] finish · ' + s.status);
     stopPoll();
-    jobId = null; ssDel('wf.duJob'); ssSet('wf.duT1', String(Date.now()));
+    jobId = null; ssDel('itgeo.duJob'); ssSet('itgeo.duT1', String(Date.now()));
     headerIdle();
     if (dbChanged(s)) needReload = true;
     if ($m.hasClass('open')) renderDone(s);
-    else ssSet('wf.duDone', '1');                            // 닫혀 있었으면 다음에 열 때 완료 화면
+    else ssSet('itgeo.duDone', '1');                            // 닫혀 있었으면 다음에 열 때 완료 화면
   }
 
   /* ---------- 시작 (예전 start) ---------- */
@@ -236,12 +261,12 @@ $(function () {
     showErr('');
     $.ajax({ url: Common.url('api/dataupdate/run.do'), method: 'POST', data: { full: full }, dataType: 'json' }).done(function (r) {
       jobId = r.jobId;
-      ssSet('wf.duJob', jobId); ssSet('wf.duT0', String(Date.now())); ssDel('wf.duT1'); ssDel('wf.duFeedT'); ssDel('wf.duDone');
+      ssSet('itgeo.duJob', jobId); ssSet('itgeo.duT0', String(Date.now())); ssDel('itgeo.duT1'); ssDel('itgeo.duFeedT'); ssDel('itgeo.duDone');
       last = { status: 'running', step: '준비', progress: 0 };
       renderRun(last, true);
       startPoll();
     }).fail(function (x) {                                    // 409 이미 실행 중 · 503 배치 서버 꺼짐 · 403 구청 계정
-      showErr((x.responseJSON || {}).msg || '시작하지 못했습니다. (' + x.status + ')');
+      showErr(errMsg(x, '시작하지 못했습니다. (' + x.status + ')'));
     }).always(function () { $btns.prop('disabled', false); });
   }
 
@@ -249,19 +274,19 @@ $(function () {
   function open() {
     showErr('');
     $m.addClass('open');
-    if (jobId) { renderRun(last || { status: 'running', step: '준비', progress: 0 }, true); return; }
+    if (jobId) { renderRun(last || { status: 'running', step: '준비', progress: 0 }, true); if (lost) showErr(LOST_MSG); return; }
     setView('idle'); $('#duLast').removeClass('ok fail').text('마지막 실행 결과를 확인하는 중…');
     $.ajax({ url: Common.url('api/dataupdate/latest.do'), dataType: 'json' }).done(function (s) {
       if (jobId || !$m.hasClass('open')) return;
       if (s && s.status === 'running') { $('#duLast').html('<small>지금</small>다른 창에서 시작한 업데이트가 실행 중입니다. 끝난 뒤 다시 열어 주세요.'); return; }
-      if (ssGet('wf.duDone') && s && (s.report || s.status === 'error')) renderDone(s);   // 백그라운드에서 끝난 작업
+      if (ssGet('itgeo.duDone') && s && (s.report || s.status === 'error')) renderDone(s);   // 백그라운드에서 끝난 작업
       else renderIdle(s);
-    }).fail(function (x) { renderIdle(null); showErr((x.responseJSON || {}).msg || '마지막 실행 결과를 읽지 못했습니다.'); });
+    }).fail(function (x) { renderIdle(null); showErr(errMsg(x, '마지막 실행 결과를 읽지 못했습니다.')); });
   }
   function close() {
     $m.removeClass('open');
     if (view === 'done') {
-      ssDel('wf.duDone');
+      ssDel('itgeo.duDone');
       /* 지도 화면이면 현재 조건으로 지도 · 결과를 다시 (분석 전이면 구 요약만). map-main.js 가 window.WF_MAP_RELOAD 를 내놓는다 */
       if (needReload && window.WF_MAP_RELOAD) window.WF_MAP_RELOAD();
       needReload = false;
@@ -276,7 +301,7 @@ $(function () {
   $('#duFull').on('click', function () { start(true); });
   /* 새로 위험해진 건물만 지도에서 : 우선 쿼리 파라미터로만 넘긴다 (map.do?changed=up). 서버 필터는 배치 서버가 diff 를 주면 연결 */
   $('#duView').on('click', function () {
-    ssDel('wf.duDone');
+    ssDel('itgeo.duDone');
     location.href = Common.url('map.do?changed=up');
   });
 
