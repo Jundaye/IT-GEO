@@ -47,41 +47,7 @@
           <small>리스트를 펼치면 오른쪽 지도에 동선과 소요시간이 나옵니다.</small>
         </div>
 
-<<<<<<< HEAD
-  <c:forEach var="f" items="${list}">
-    <div class="fl-card" data-id="${f.surveyId}">
-      <div class="fl-row">
-        <div>
-          <div class="t"><c:out value="${f.title}"/></div>
-          <div class="s">
-            <c:if test="${not empty f.emdNm}"><span class="badge"><c:out value="${f.guName}"/> <c:out value="${f.emdNm}"/></span></c:if>
-            <c:choose>
-              <c:when test="${f.itemCnt > 0}"><span><c:out value="${f.firstAddr}"/><c:if test="${f.itemCnt > 1}"> 외 ${f.itemCnt - 1}동</c:if></span></c:when>
-              <c:otherwise><span class="muted">담긴 건물이 없습니다</span></c:otherwise>
-            </c:choose>
-          </div>
-        </div>
-        <div class="n">${f.itemCnt}동</div>
-        <div class="prog"><i><b style="width:${f.progressPct}%"></b></i><span>${f.doneCnt}/${f.itemCnt}</span></div>
-        <div class="fl-actions">
-          <a class="btn btn-primary btn-sm" href="${ctx}/fieldedit.do?listId=${f.surveyId}">편집</a>
-          <a class="btn btn-line btn-sm" href="${ctx}/fielddetail.do?listId=${f.surveyId}">상세보기</a>
-          <button type="button" class="caret" title="펼치기" aria-label="펼치기"></button>
-        </div>
-      </div>
-      <div class="fl-body">
-        <%-- [약도 1] 왼쪽 = 건물 목록, 오른쪽 = 약도 --%>
-        <div class="fl-body-grid">
-        <div class="fl-items">
-        <div class="cap">건물 ${f.itemCnt}동 · 동선 순서</div>
-        <c:forEach var="it" items="${f.items}">
-          <%-- [약도 2] 약도에 찍을 좌표 · 번호 · 확인 여부 --%>
-          <div class="fl-item" data-lat="${it.lat}" data-lng="${it.lng}" data-order="${it.visitOrder}" data-checked="${it.checked}" data-title="<c:out value='${it.title}'/>">
-            <span class="num ${it.checked ? 'done' : ''}">${it.checked ? '✓' : it.visitOrder}</span>
-            <div class="ti"><b><c:out value="${it.title}"/></b><span><c:out value="${it.addr}"/></span></div>
-            <span class="sc">${it.score}</span>
-            <span class="badge ${it.checked ? 'done' : 'doing'}">${it.checked ? '확인 완료' : '미확인'}</span>
-=======
+
         <c:forEach var="f" items="${list}">
           <c:set var="st" value="${f.doneCnt == 0 ? 'todo' : (f.doneCnt >= f.itemCnt ? 'done' : 'doing')}"/>
           <div class="fx-card" data-id="${f.surveyId}" data-sgg="${empty f.items ? f.sggCd : f.items[0].sggCd}"
@@ -131,26 +97,9 @@
                 </c:choose>
               </div>
             </div>
->>>>>>> refs/remotes/origin/main
+
           </div>
         </c:forEach>
-<<<<<<< HEAD
-        <c:if test="${empty f.items}"><div class="muted" style="padding:8px 10px">"편집"에서 보관함 건물을 담으세요.</div></c:if>
-        </div>
-        <%-- [약도 3] 약도 자리 (카드를 처음 펼칠 때 그린다) --%>
-        <c:if test="${not empty f.items}">
-          <div class="fl-map">
-            <div class="nmap"></div>
-            <div class="fl-map-zoom"><button type="button" class="zin" title="확대">+</button><button type="button" class="zout" title="축소">−</button></div>
-          </div>
-        </c:if>
-        </div>
-        <div class="fl-body-foot">
-          <c:choose>
-            <c:when test="${f.doneCnt > 0}"><button type="button" class="fl-del" disabled title="현장 확인 기록이 있는 리스트는 건물 확인 이력을 지키기 위해 삭제할 수 없습니다">리스트 삭제</button></c:when>
-            <c:otherwise><button type="button" class="fl-del" data-id="${f.surveyId}" data-title="<c:out value='${f.title}'/>">리스트 삭제</button></c:otherwise>
-          </c:choose>
-=======
 
         <c:if test="${empty list}"><div class="fx-empty">${tab == 'done' ? '완료된 리스트가 없습니다.' : '진행 중인 리스트가 없습니다.'}</div></c:if>
       </div>
@@ -176,25 +125,11 @@
           <div>현장 확인 예상<b id="rtCheck">-</b></div>
           <div>총 소요<b id="rtTotal">-</b></div>
           <div>출발 → 예상 종료<b id="rtEnd">-</b></div>
->>>>>>> refs/remotes/origin/main
+
         </div>
       </div>
       <div class="fx-map-empty" id="fxMapEmpty" style="display:none"></div>
     </div>
-<<<<<<< HEAD
-  </c:forEach>
-
-  <c:if test="${empty list}"><div class="empty">${tab == 'done' ? '완료된 리스트가 없습니다.' : '진행 중인 리스트가 없습니다.'}</div></c:if>
-  <a class="fl-new" href="${ctx}/fieldedit.do?listId=0" title="새 현장확인 리스트"><span>+</span></a>
-  
-  <%-- 달력 스타일 : resources/css/pages_calendar.css (다른 달력 페이지에서도 이 한 줄로 같이 씀) --%>
-  <link rel="stylesheet" href="${ctx}/resources/css/pages_calendar.css">
-
-  <%-- 이번 주 달력 : 위 리스트의 제목 줄을 끌어다 날짜 칸에 놓으면 그 날 일정으로 들어간다 --%>
-
-  <div id="flCalendar" class="fl-calendar"></div>
-  
-=======
   </div>
 >>>>>>> refs/remotes/origin/main
 </div>
