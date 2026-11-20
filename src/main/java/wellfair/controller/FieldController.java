@@ -28,15 +28,26 @@ public class FieldController {
 	@Autowired
 	FieldService fieldService;
 
-	// GET fieldlist.do?tab=doing|done&q
+	// GET fieldlist.do?tab=doing|done&q&open=listId
+	// 현장 확인 리스트 + 상세(지도 · 경로 · 소요시간 · 확인 완료)를 한 화면에. open = 처음 펼칠 리스트 (없으면 첫 리스트)
 	@GetMapping("fieldlist.do")
-	public String list(@RequestParam(value = "tab", defaultValue = "doing") String tab,
-			@RequestParam(value = "q", required = false) String q, HttpSession session, Model model) {
+	public String list(@RequestParam(value = "tab", required = false) String tabParam,
+			@RequestParam(value = "q", required = false) String q,
+			@RequestParam(value = "open", required = false) Long open, HttpSession session, Model model) {
 		long userId = userId(session);
 		String gu = userGu(session);
+		String tab = "done".equals(tabParam) ? "done" : "doing";
+		List<FieldListTO> list = fieldService.getFieldList(userId, gu, tab, q, true);
+		/* open 으로 왔는데 (예전 상세 주소 · 확인 완료 · 저장 후) 이 탭에 없고 탭을 직접 고르지 않았으면 다른 탭에서 찾는다 */
+		if (open != null && tabParam == null && list.stream().noneMatch(f -> f.getSurveyId() == open)) {
+			String other = "done".equals(tab) ? "doing" : "done";
+			List<FieldListTO> o = fieldService.getFieldList(userId, gu, other, q, true);
+			if (o.stream().anyMatch(f -> f.getSurveyId() == open)) { tab = other; list = o; }
+		}
 		model.addAttribute("tab", tab);
 		model.addAttribute("q", q);
-		model.addAttribute("list", fieldService.getFieldList(userId, gu, tab, q, true));
+		model.addAttribute("openId", open);
+		model.addAttribute("list", list);
 		model.addAttribute("doingCnt", fieldService.getFieldList(userId, gu, "doing", null, false).size());
 		model.addAttribute("doneCnt", fieldService.getFieldList(userId, gu, "done", null, false).size());
 		model.addAttribute("naverClientId", naverClientId);   // 리스트 카드 약도 (네이버 지도)
@@ -81,7 +92,7 @@ public class FieldController {
 		return "redirect:fieldlist.do?tab=" + ("done".equals(tab) ? "done" : "doing");
 	}
 
-	// POST fieldedit.do : listId, title, moveMode(walk/transit/car), factorIds(순서대로) → redirect:fielddetail.do
+	// POST fieldedit.do : listId, title, moveMode(walk/transit/car), factorIds(순서대로) → redirect:fieldlist.do?open=
 	@PostMapping("fieldedit.do")
 	public String edit(@RequestParam(value = "listId", defaultValue = "0") long listId,
 			@RequestParam(value = "title", required = false) String title,   // 비우면 "새 리스트N" (FieldService.nextAutoTitle)
@@ -97,7 +108,7 @@ public class FieldController {
 		}
 		if (id == 0) return "redirect:fieldlist.do";
 		ra.addFlashAttribute("msg", "변경 내용을 저장했습니다.");
-		return "redirect:fielddetail.do?listId=" + id;
+		return "redirect:fieldlist.do?open=" + id;
 	}
 
 	// POST fieldadditems.do : listId(0이면 새 리스트), factorIds → redirect:fieldedit.do
@@ -121,31 +132,10 @@ public class FieldController {
 		return "redirect:fieldedit.do?listId=" + id;
 	}
 
-	// GET fielddetail.do?listId
+	// GET fielddetail.do?listId : 상세는 현장 확인 리스트 화면에 합쳐졌다. 예전 주소(대시보드 [상세보기] 등)는 그 리스트를 펼친 목록으로 보낸다
 	@GetMapping("fielddetail.do")
-	public String detail(@RequestParam("listId") long listId, HttpSession session, Model model) {
-		FieldListTO field = fieldService.getFieldDetail(listId, userId(session), userGu(session));
-		if (field == null) return "redirect:fieldlist.do";
-		double km = FieldService.totalKm(field.getItems());
-		int walk = FieldService.minutes(km, FieldService.speedOf(field.getMoveMode()));   // 저장된 이동수단 기준 (변수명은 그대로)
-		int check = field.getItems().size() * FieldService.CHECK_MIN_PER_BLD;
-		Object[] g = FieldService.guOffice(field.getItems().isEmpty() ? field.getSggCd() : field.getItems().get(0).getSggCd());
-		model.addAttribute("startName", g[0]);
-		model.addAttribute("startLat", g[1]);
-		model.addAttribute("startLng", g[2]);
-		model.addAttribute("field", field);
-		model.addAttribute("km", km);
-		model.addAttribute("walkMin", FieldService.minutes(km, FieldService.WALK_KMH));
-		model.addAttribute("moveMin", walk);
-		model.addAttribute("carMin", FieldService.minutes(km, FieldService.CAR_KMH));
-		model.addAttribute("transitMin", FieldService.minutes(km, FieldService.TRANSIT_KMH));
-		model.addAttribute("checkMin", check);
-		model.addAttribute("totalMin", walk + check);
-		int tm = walk + check;
-		model.addAttribute("totalText", tm >= 60 ? (tm / 60) + "시간 " + (tm % 60) + "분" : tm + "분");
-		model.addAttribute("endTime", String.format("%02d:%02d", (9 * 60 + 30 + walk + check) / 60, (9 * 60 + 30 + walk + check) % 60));
-		model.addAttribute("naverClientId", naverClientId);
-		return "fielddetail";
+	public String detail(@RequestParam("listId") long listId) {
+		return "redirect:fieldlist.do?open=" + listId;
 	}
 
 	// POST fieldcheck.do : planId, listId, result, content → 확인 완료 (원래 앱 기능, 웹 버튼으로 대체)
@@ -161,7 +151,7 @@ public class FieldController {
 		c.setResult(result);
 		if (content != null && !content.isBlank()) c.setContent(content.trim());
 		ra.addFlashAttribute("msg", fieldService.checkItem(c) ? "확인 완료로 처리했습니다." : "처리하지 못했습니다.");
-		return "redirect:fielddetail.do?listId=" + listId;
+		return "redirect:fieldlist.do?open=" + listId;
 	}
 
 	private static long userId(HttpSession session) {
