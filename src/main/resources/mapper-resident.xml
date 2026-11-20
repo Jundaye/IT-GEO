@@ -89,6 +89,16 @@
 		  FROM (<include refid="mapper-resident.householdSelect"/>) y
 	</select>
 
+	<!-- 3D 층 색칠 : 거주 층마다 가구 수 · 취약 가구 수만 (이름 · 나이 없음). 취약 기준은 getResidentCount 의 vuln_hh 와 같다 -->
+	<select id="getFloorStat" parameterType="String" resultType="wellfair.to.FloorStatTO">
+		SELECT y.res_flr
+		     , COUNT(*)                                                                    hh_cnt
+		     , IFNULL(SUM(y.priority >= <include refid="mapper-resident.vulnMin"/>), 0)    vuln_hh_cnt
+		  FROM (<include refid="mapper-resident.householdSelect"/>) y
+		 GROUP BY y.res_flr
+		 ORDER BY y.res_flr
+	</select>
+
 	<!-- 거주 가구 탭 : 세대 카드 (가림 처리는 ResidentService).
 	     순서 = 가장 취약한 순 (12단계) : 가구 가점 → 고립 등급(고위험고립 → 사회적고립) → 가구원 최고 나이 → 1인 가구 먼저 → id. JS 는 다시 정렬하지 않는다 -->
 	<select id="getResidentList" parameterType="String" resultType="wellfair.to.ResidentTO">

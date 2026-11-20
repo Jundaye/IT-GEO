@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import wellfair.dao.ResidentDAO;
+import wellfair.to.FloorStatTO;
 import wellfair.to.ResidentCountTO;
 import wellfair.to.ResidentTO;
 
@@ -25,6 +26,11 @@ public class ResidentService {
 	public ResidentCountTO getResidentCount(String bldId) {
 		ResidentCountTO cnt = dao.getResidentCount(bldId);
 		return cnt == null ? new ResidentCountTO() : cnt;
+	}
+
+	// 3D 층 색칠 : 층별 가구 수 · 취약 가구 수 (개인정보 없음)
+	public List<FloorStatTO> getFloorStat(String bldId) {
+		return dao.getFloorStat(bldId);
 	}
 
 	// 거주 가구 탭 : 세대 카드 (이름·생년월일 가림, 태그 생성)

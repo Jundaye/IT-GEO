@@ -1,0 +1,42 @@
+/* ===== calendar.css : 풀캘린더 공용 스타일 (어두운 화면)
+   쓰는 페이지 : 달력 div 에 class="fl-calendar" 를 붙이고, JSP 에서 이 파일을 link 태그로 불러온다.
+   위치 : src/main/webapp/resources/css/calendar.css ===== */
+.fl-cal-hint { margin: 22px 0 8px; font-size: 13px; color: var(--text-2); }
+.fl-cal-hint b { color: var(--text); font-weight: 600; }
+.fl-calendar {
+  margin: 0 0 18px; padding: 12px 14px; background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text);
+  --fc-border-color: var(--line);
+  --fc-page-bg-color: var(--bg-panel);
+  --fc-neutral-bg-color: var(--bg-card);
+  --fc-today-bg-color: rgba(59, 130, 246, .14);
+  --fc-event-bg-color: var(--primary);
+  --fc-event-border-color: var(--primary);
+  --fc-event-text-color: #fff;
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: var(--line);
+  --fc-button-text-color: var(--text-2);
+  --fc-button-hover-bg-color: var(--bg-hover);
+  --fc-button-hover-border-color: var(--line);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+}
+/* 날짜 · 요일 칸 : 다른 곳의 th / a 스타일(흰 배경 등)이 덮어쓰지 못하게 직접 지정 */
+.fl-calendar th, .fl-calendar .fc-col-header-cell { background: var(--bg-card) !important; }
+.fl-calendar .fc-col-header-cell-cushion,
+.fl-calendar .fc-daygrid-day-number { color: var(--text) !important; font-size: 13px; text-decoration: none; }
+.fl-calendar .fc-day-sun .fc-col-header-cell-cushion, .fl-calendar .fc-day-sun .fc-daygrid-day-number { color: #f07178 !important; }
+.fl-calendar .fc-day-sat .fc-col-header-cell-cushion, .fl-calendar .fc-day-sat .fc-daygrid-day-number { color: #6aa8ff !important; }
+.fl-calendar td { background: var(--bg-panel); }
+.fl-calendar td.fc-day-today { background: var(--fc-today-bg-color) !important; }
+.fl-calendar .fc-toolbar-title { font-size: 16px; color: var(--text); }
+.fl-calendar .fc-button { height: 32px; padding: 0 12px; font-size: 13px; box-shadow: none !important; }
+.fl-calendar .fc-daygrid-day-frame { min-height: 84px; }
+.fl-calendar .fc-daygrid-more-link { color: var(--text-2); }
+/* 일정 막대 + 빼기 × */
+.fl-calendar .fc-event { position: relative; padding: 2px 20px 2px 6px; font-size: 12px; cursor: pointer; }
+.fl-calendar .fc-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 14px; line-height: 1; opacity: .7; cursor: pointer; }
+.fl-calendar .fc-x:hover { opacity: 1; }
+/* 리스트 제목 줄은 끌 수 있다는 표시 */
+.fl-card .fl-row { cursor: grab; }
+.fc-event-dragging, .fl-row.fc-event-dragging { cursor: grabbing; }
+ 

@@ -25,7 +25,13 @@ $(function () {
   function ssJson(k) { try { return JSON.parse(ssGet(k) || '{}') || {}; } catch (e) { return {}; } }
 
   var jobId = ssGet('wf.duJob');      // 실행 중인 작업 (없으면 null)
-  var timer = null;
+  var timer = null;                   // 다음 조회 예약 (setTimeout)
+  var polling = false;                // 조회를 이어 가는 중
+  var finished = false;               // finish() 는 작업 하나에 한 번만
+  var failN = 0;                      // 조회 연속 실패 횟수
+  var lost = false;                   // 연속 FAIL_MAX 회 실패 → 조회를 멈춤 (jobId · wf.duJob 은 남겨 두어 새로고침하면 이어서 본다)
+  var FAIL_MAX = 5;
+  var LOST_MSG = '연결이 끊겼습니다. 새로고침하면 다시 확인합니다';
   var last = null;                    // 마지막으로 받은 작업 상태
   var view = 'idle';                  // idle | run | done
   var feedN = 0;                      // 피드에 이미 그린 줄 수
@@ -206,22 +212,41 @@ $(function () {
     $('#duHbar').css('width', 0);
   }
 
-  /* ---------- 폴링 (1초) ---------- */
-  function stopPoll() { clearInterval(timer); timer = null; }
+  /* ---------- 폴링 : 응답을 받은 뒤 1초 뒤에 다음 조회 (체인). 앞 요청이 끝나기 전에 다음 요청을 보내지 않으므로
+       늦게 온 '실행 중' 응답이 '완료' 화면을 되돌리는 일이 없다 (리뷰 3) ---------- */
+  function errMsg(x, def) { var j = (x && x.responseJSON) || {}; return j.message || j.msg || def; }
+  function stopPoll() { clearTimeout(timer); timer = null; polling = false; }
+  function next() { clearTimeout(timer); timer = setTimeout(poll, 1000); }
   function poll() {
-    if (!jobId) return;
-    $.ajax({ url: Common.url('api/dataupdate/job.do'), data: { id: jobId }, dataType: 'json' }).done(function (s) {
+    if (!jobId || !polling) return;
+    var my = jobId;
+    $.ajax({ url: Common.url('api/dataupdate/job.do'), data: { id: my }, dataType: 'json' }).done(function (s) {
+      if (my !== jobId || !polling) return;                   // 그 사이 멈췄거나 다른 작업
+      failN = 0;
       last = s;
-      if (s.status === 'running') { headerRun(s); if ($m.hasClass('open')) renderRun(s); return; }
+      if (s.status === 'running') { headerRun(s); if ($m.hasClass('open')) renderRun(s); next(); return; }
       finish(s);
-    }).fail(function (x) {                                    // 배치 서버가 중간에 꺼지면 조회를 멈춘다
-      stopPoll(); jobId = null; ssDel('wf.duJob'); headerIdle();
-      var msg = (x.responseJSON || {}).msg || '진행 상황을 읽지 못했습니다.';
-      if ($m.hasClass('open')) { renderIdle(null); $('#duLast').text('진행 상황을 이어서 볼 수 없습니다.'); showErr(msg); }
+    }).fail(function (x) {
+      if (my !== jobId || !polling) return;
+      /* 404 = 배치 서버가 다시 켜져 그 작업 기록이 없어졌다 (다시 물어도 같음) → 이 작업 추적은 끝낸다 */
+      if (x.status === 404) {
+        stopPoll(); jobId = null; ssDel('wf.duJob'); headerIdle();
+        if ($m.hasClass('open')) { renderIdle(null); $('#duLast').text('진행 상황을 이어서 볼 수 없습니다.'); showErr(errMsg(x, '작업 기록이 없습니다.')); }
+        return;
+      }
+      /* 그 밖의 실패(배치 서버 잠깐 꺼짐 · 응답 늦음 · 네트워크)는 다시 묻는다. 연속 FAIL_MAX 회면 멈추고 안내만 (리뷰 4).
+         작업은 배치 서버에서 계속 돌고 있을 수 있으므로 jobId · wf.duJob 은 지우지 않는다 → 새로고침하면 다시 이어서 본다 */
+      failN++;
+      if (failN < FAIL_MAX) { next(); return; }
+      stopPoll(); lost = true;
+      if ($m.hasClass('open')) showErr(LOST_MSG); else Common.toast('데이터 업데이트 : ' + LOST_MSG);
     });
   }
-  function startPoll() { stopPoll(); headerRun(last); poll(); timer = setInterval(poll, 1000); }
+  function startPoll() { stopPoll(); polling = true; finished = false; failN = 0; lost = false; headerRun(last); poll(); }
   function finish(s) {
+    if (finished) return;                                     // 한 번만 (리뷰 3)
+    finished = true;
+    console.log('[dataupdate] finish · ' + s.status);
     stopPoll();
     jobId = null; ssDel('wf.duJob'); ssSet('wf.duT1', String(Date.now()));
     headerIdle();
@@ -241,7 +266,7 @@ $(function () {
       renderRun(last, true);
       startPoll();
     }).fail(function (x) {                                    // 409 이미 실행 중 · 503 배치 서버 꺼짐 · 403 구청 계정
-      showErr((x.responseJSON || {}).msg || '시작하지 못했습니다. (' + x.status + ')');
+      showErr(errMsg(x, '시작하지 못했습니다. (' + x.status + ')'));
     }).always(function () { $btns.prop('disabled', false); });
   }
 
@@ -249,14 +274,14 @@ $(function () {
   function open() {
     showErr('');
     $m.addClass('open');
-    if (jobId) { renderRun(last || { status: 'running', step: '준비', progress: 0 }, true); return; }
+    if (jobId) { renderRun(last || { status: 'running', step: '준비', progress: 0 }, true); if (lost) showErr(LOST_MSG); return; }
     setView('idle'); $('#duLast').removeClass('ok fail').text('마지막 실행 결과를 확인하는 중…');
     $.ajax({ url: Common.url('api/dataupdate/latest.do'), dataType: 'json' }).done(function (s) {
       if (jobId || !$m.hasClass('open')) return;
       if (s && s.status === 'running') { $('#duLast').html('<small>지금</small>다른 창에서 시작한 업데이트가 실행 중입니다. 끝난 뒤 다시 열어 주세요.'); return; }
       if (ssGet('wf.duDone') && s && (s.report || s.status === 'error')) renderDone(s);   // 백그라운드에서 끝난 작업
       else renderIdle(s);
-    }).fail(function (x) { renderIdle(null); showErr((x.responseJSON || {}).msg || '마지막 실행 결과를 읽지 못했습니다.'); });
+    }).fail(function (x) { renderIdle(null); showErr(errMsg(x, '마지막 실행 결과를 읽지 못했습니다.')); });
   }
   function close() {
     $m.removeClass('open');

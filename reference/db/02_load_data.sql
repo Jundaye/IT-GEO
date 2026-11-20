@@ -6,7 +6,8 @@
 --   * 서버도 허용:  SET GLOBAL local_infile = 1;   (root로 한 번)
 --   * 파일 위치 (다르면 경로만 고치기)
 --       C:/final_data/3gu_bld_db.csv                         UTF-8, 콤마
---       C:/final_data/new_pop_dum_final/{구}_population_dummy.csv   EUC-KR(cp949), 탭
+--       C:/final_data/new_pop_dum_final/{guro,yangcheon}_population_dummy.csv   EUC-KR(cp949), 탭
+--       C:/final_data/new_pop_dum_final/yeongdeungpo_population_dummy.csv        UTF-8, 쉼표 (컬럼 순서 다름)
 --
 -- 흐름
 --   building  ← 3gu_bld_db.csv 바로
@@ -27,14 +28,17 @@ LOAD DATA LOCAL INFILE 'C:/final_data/3gu_bld_db.csv' INTO TABLE building
   IGNORE 1 LINES
   (bld_id, sgg_cd, emd_nm, addr, @bld_nm, @dong_nm, @use_cd, @use_nm, @grnd_flr, @ugrnd_flr, @useapr_day, @viol_yn, @units,
    ugrnd_res, nonres_hh, @sp_type, @sp_nm, elev_m, slope_deg, flood_cnt, flood_depth, @price_type, @price_pct,
-   hosp_nm, hosp_dist, bus_nm, bus_dist, welf_nm, welf_dist, lng, lat)
+   hosp_nm, hosp_dist, bus_nm, bus_dist, welf_nm, welf_dist, lng, lat,
+   @rent_yn, @narrow_rd, @strct_nm, @ugrnd_units)   -- 11/16 추가 4컬럼 (db csv 35컬럼)
   SET bld_nm     = NULLIF(@bld_nm,''),     dong_nm    = NULLIF(@dong_nm,''),
       use_cd     = NULLIF(@use_cd,''),     use_nm     = NULLIF(@use_nm,''),
       grnd_flr   = NULLIF(@grnd_flr,''),   ugrnd_flr  = NULLIF(@ugrnd_flr,''),
       useapr_day = NULLIF(@useapr_day,''), viol_yn    = NULLIF(@viol_yn,''),
       units      = NULLIF(@units,''),      sp_type    = NULLIF(@sp_type,''),
       sp_nm      = NULLIF(@sp_nm,''),      price_type = NULLIF(@price_type,''),
-      price_pct  = NULLIF(@price_pct,'');
+      price_pct  = NULLIF(@price_pct,''),
+      rent_yn    = NULLIF(@rent_yn,''),    narrow_rd   = NULLIF(@narrow_rd,''),
+      strct_nm   = NULLIF(@strct_nm,''),   ugrnd_units = NULLIF(@ugrnd_units,'');
 
 -- ---------------------------------------------------------------------
 -- 2. 더미 → 임시 테이블 (더미 40개 컬럼 순서 그대로 + 구 정보)
@@ -71,13 +75,14 @@ LOAD DATA LOCAL INFILE 'C:/final_data/new_pop_dum_final/yangcheon_population_dum
    detect_cnt, crisis_info, detect_result, non_target_rsn, support_type, dong_nm, ho_nm, orig_res_flr, match_how, move_how)
   SET sgg_cd = '11470', mbr_key = mbr_id + 2000000, hh_key = hh_id + 2000000;
 
--- 영등포 11560  +3,000,000
+-- 영등포 11560  +3,000,000  (UTF-8, 쉼표, 아파트_동~세대이동_방식 5개가 층수 바로 뒤)
 LOAD DATA LOCAL INFILE 'C:/final_data/new_pop_dum_final/yeongdeungpo_population_dummy.csv' INTO TABLE stg_pop
-  CHARACTER SET euckr FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES
+  CHARACTER SET utf8mb4 FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n' IGNORE 1 LINES
   (mbr_id, hh_id, mbr_nm, hh_head_nm, head_rel, hh_mbr_cnt, single_hh_yn, sex, age, birth_day,
-   res_area, res_unknown_yn, risk_grade, bld_id, addr, use_nm, res_flr, dsbl_yn, dsbl_grade_nm, single_parent_yn,
+   res_area, res_unknown_yn, risk_grade, bld_id, addr, use_nm, res_flr, dong_nm, ho_nm, orig_res_flr, match_how, move_how,
+   dsbl_yn, dsbl_grade_nm, single_parent_yn,
    basic_pension_yn, near_poor_yn, nhis_arrears_yn, care_burden_yn, dsbl_type, basic_living_yn, hh_type, blind_spot_yn, blind_spot_type, sys_detect_yn,
-   detect_cnt, crisis_info, detect_result, non_target_rsn, support_type, dong_nm, ho_nm, orig_res_flr, match_how, move_how)
+   detect_cnt, crisis_info, detect_result, non_target_rsn, support_type)
   SET sgg_cd = '11560', mbr_key = mbr_id + 3000000, hh_key = hh_id + 3000000;
 
 -- ---------------------------------------------------------------------
@@ -118,10 +123,10 @@ INSERT INTO users (login_id, password_hash) VALUES ('admin', '1234');
 -- 4. 확인 (기대값)
 -- ---------------------------------------------------------------------
 SELECT 'building'  t, COUNT(*) n FROM building    -- 72,961
-UNION ALL SELECT 'household', COUNT(*) FROM household  -- 460,151
-UNION ALL SELECT 'person',    COUNT(*) FROM person     -- 999,314
-UNION ALL SELECT 'residency', COUNT(*) FROM residency  -- 460,151
-UNION ALL SELECT 'arrears',   COUNT(*) FROM arrears;   -- 460,151
+UNION ALL SELECT 'household', COUNT(*) FROM household  -- 500,542
+UNION ALL SELECT 'person',    COUNT(*) FROM person     -- 1,071,736
+UNION ALL SELECT 'residency', COUNT(*) FROM residency  -- 500,542
+UNION ALL SELECT 'arrears',   COUNT(*) FROM arrears;   -- 500,542
 
 -- 이상 없으면 임시 테이블 삭제
 -- DROP TABLE stg_pop;

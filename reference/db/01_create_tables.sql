@@ -2,7 +2,7 @@
 -- wellfair : 주사위(WellFAIR) 중간점검 DB  (MySQL 8)
 -- 팀원 초안 기준으로 아래만 고침
 --   [1] bld_id  BIGINT → VARCHAR(28)   (실제 값이 28자리라 BIGINT 범위 초과)
---   [2] building 컬럼 = 3gu_bld_db.csv 31개 그대로 (객실수·고시원추정은 units에 합산, 업소종류는 sp_type)
+--   [2] building 컬럼 = 3gu_bld_db.csv 35개 그대로 (11/16 +rent_yn, narrow_rd, strct_nm, ugrnd_units) (객실수·고시원추정은 units에 합산, 업소종류는 sp_type)
 --   [3] mbr_id / hh_id 구별 오프셋 (구로 +1,000,000 / 양천 +2,000,000 / 영등포 +3,000,000) + household.sgg_cd
 --   [4] crisis_info 40 → 200
 --   [5] vulnerability_factor UNIQUE(vulnerability_id) → UNIQUE(vulnerability_id, bld_id)
@@ -19,6 +19,11 @@ CREATE DATABASE IF NOT EXISTS wellfair DEFAULT CHARACTER SET utf8mb4;
 USE wellfair;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS survey_schedule;        -- 06_app_tables.sql 에서 만드는 테이블 4개
+DROP TABLE IF EXISTS survey_photo;
+DROP TABLE IF EXISTS field_report;
+DROP TABLE IF EXISTS survey_record_detail;
+DROP TABLE IF EXISTS stg_pop;                -- 02 임시 테이블
 DROP TABLE IF EXISTS bld_resident_stat;   -- 04_update.sql 에서 만드는 테이블
 DROP TABLE IF EXISTS handover_memo;
 DROP TABLE IF EXISTS transfer_log;
@@ -85,20 +90,24 @@ CREATE TABLE building (
   nonres_hh   TINYINT      NOT NULL COMMENT '비주거 용도인데 세대·가구 있음 1/0',
   sp_type     VARCHAR(20)  NULL     COMMENT '고시원 / 여관 / 여인숙',
   sp_nm       VARCHAR(200) NULL     COMMENT '업소 이름',
-  elev_m      DOUBLE       NOT NULL COMMENT '고도 m',
-  slope_deg   DOUBLE       NOT NULL COMMENT '경사 도',
+  elev_m      DOUBLE       NOT NULL COMMENT '고도 m (5m DEM, 수치지형도 1:5000)',
+  slope_deg   DOUBLE       NOT NULL COMMENT '경사 도 (5m DEM)',
   flood_cnt   INT          NOT NULL COMMENT '침수된 연도 수',
   flood_depth DOUBLE       NOT NULL COMMENT '최대 침수 깊이 m',
   price_type  VARCHAR(4)   NULL     COMMENT '개별 / 공동',
   price_pct   DOUBLE       NULL     COMMENT '같은 구·유형 내 공시가격 백분위 (낮을수록 쌈)',
   hosp_nm     VARCHAR(100) NOT NULL COMMENT '가장 가까운 병원',
-  hosp_dist   DOUBLE       NOT NULL COMMENT '병원 거리 m',
+  hosp_dist   DOUBLE       NOT NULL COMMENT '병원 거리 m (도로망 최단경로)',
   bus_nm      VARCHAR(100) NOT NULL COMMENT '가장 가까운 정류장',
-  bus_dist    DOUBLE       NOT NULL COMMENT '정류장 거리 m',
+  bus_dist    DOUBLE       NOT NULL COMMENT '정류장 거리 m (도로망 최단경로)',
   welf_nm     VARCHAR(100) NOT NULL COMMENT '가장 가까운 복지시설',
-  welf_dist   DOUBLE       NOT NULL COMMENT '복지시설 거리 m',
+  welf_dist   DOUBLE       NOT NULL COMMENT '복지시설 거리 m (도로망 최단경로)',
   lng         DOUBLE       NOT NULL COMMENT '경도 WGS84',
   lat         DOUBLE       NOT NULL COMMENT '위도 WGS84',
+  rent_yn     TINYINT      NULL     COMMENT '공공임대(SH·LH) 1/0',
+  narrow_rd   TINYINT      NULL     COMMENT '도로폭 4m 미만 도로 접함 1/0',
+  strct_nm    VARCHAR(30)  NULL     COMMENT '구조 (건축물대장, 빈칸=대장 미연결)',
+  ugrnd_units INT          NULL     COMMENT '지하 전유 호 수 (공동주택만, 그 외 NULL). ugrnd_res와 합치지 말 것',
   PRIMARY KEY (bld_id),
   KEY idx_building_emd (sgg_cd, emd_nm),
   KEY idx_building_coords (lat, lng)

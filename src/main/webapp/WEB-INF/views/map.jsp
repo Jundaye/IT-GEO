@@ -248,6 +248,7 @@
     document.getElementById('map').innerHTML = '<div class="map-error"><b>네이버 지도 인증 실패</b><p>Client ID 또는 Web 서비스 URL 등록을 확인하세요.</p></div>';
   };
   window.APP_SCORE_MIN = ${criteria.scoreMin};   // 기준점 (app.properties app.analysis.score-min) → map-config SCORE_MIN
+  window.APP_VWORLD_KEY = '<c:out value="${vworldKey}"/>';   // 브이월드 인증키 (app.properties app.vworld.api-key) → resources/vworld3d/bld3d-frame.html 이 읽는다
   window.LOCK_GU = '<c:out value="${lockGu}"/>';   // 구청 계정이면 소속 구 코드, 서울시청이면 
   window.OPEN_BLD = '<c:out value="${openBldId}"/>';   // map.do?bldId= (05 지도에서 보기)
   window.OPEN_CHANGED = '<c:out value="${param.changed}"/>';   // map.do?changed=up (데이터 업데이트 완료 → 새로 위험해진 건물 보기)

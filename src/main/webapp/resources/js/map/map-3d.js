@@ -9,7 +9,7 @@
  *    상세 패널의 [3D 보기] 버튼(#btn3d)을 눌러야 보인다. 그리는 동안 버튼은 스피너가 도는 "3D 준비 중" 이고, 다 그려지면 "3D 보기" 로 바뀐다.
  *    준비가 끝나기 전에 눌러 창을 열면 3D 영역에도 로딩 레이어가 덮인다 (아래 loading)
  *  - 이 파일과 resources/vworld3d/bld3d-frame.html 은 feature/view-3D 브랜치의 것을 가져와 로딩 표시만 더했다 (2026-11-17)
- *  - 층별 색 : 거주 가구(api/map/residents.do) 의 거주 층(resFlr) · 가구 가점(priority ≥ 10 = 취약) 으로
+ *  - 층별 색 : 층별 집계(api/map/floorStat.do → 층마다 가구 수 · 취약 가구 수만. 이름 · 나이 같은 개인정보는 받지 않는다) 로
  *      지하층 = 파랑 / 취약 가구 있는 층 = 빨강(위기가구) / 옥탑 · 고시원 = 노랑 / 가구 있음 = 회색(주거) / 자료 없음 = 흰색
  */
 window.Bld3D = (function () {
@@ -21,8 +21,9 @@ window.Bld3D = (function () {
     empty:   { nm: '거주 자료 없음',  c: '#d4d4d8' },
     base:    { nm: '지하층(반지하)',  c: '#3b82f6' }
   };
-  var VULN_MIN = 10;     // 취약 가구 = 가구 가점 10 이상 (map-panel.js 와 같은 기준)
-  var $box, frame, ready = false, queued = null, seq = 0, rotating = false, drawn = false;
+  /* 엔진(iframe)이 준비되기 전에 보낸 메시지는 queue 에 쌓았다가 'ready' 때 순서대로 보낸다 (리뷰 1 · 2).
+     'show' 는 마지막 것 하나만 남기고 맨 먼저, 옵션(주변 건물 · 자동 회전)은 종류마다 마지막 값만 그 뒤에. 패널을 닫으면(hide) 전부 비운다 */
+  var $box, frame, ready = false, queue = [], seq = 0, rotating = false, drawn = false;
 
   /* 로딩 표시 (2026-11-17 I) : 3D 영역 전체를 덮는 반투명 레이어 + 스피너 + "3D 건물을 불러오는 중…".
      [3D 보기] 를 누른 즉시 보이고, 다 그려지면('drawn') 사라진다. 오류가 오거나 LOAD_MS(15초)가 넘으면 "불러오지 못했습니다 · 다시 시도".
@@ -46,10 +47,10 @@ window.Bld3D = (function () {
   function buildFloors(b, list) {
     var up = Math.max(1, Math.min(b.grndFlr || 1, 40)), down = Math.min(b.ugrndFlr || 0, 5);
     var per = {}, roof = { hh: 0, vuln: 0 };
-    (list || []).forEach(function (r) {
+    (list || []).forEach(function (r) {                       // r = 층 하나의 집계 { resFlr, hhCnt, vulnHhCnt }
       var f = parseFlr(r.resFlr), o;
       if (f === 'R') o = roof; else if (f == null) return; else o = per[f] || (per[f] = { hh: 0, vuln: 0 });
-      o.hh++; if (r.priority >= VULN_MIN) o.vuln++;
+      o.hh += Number(r.hhCnt) || 0; o.vuln += Number(r.vulnHhCnt) || 0;
       if (typeof f === 'number') { if (f < 0) down = Math.max(down, Math.min(-f, 5)); else up = Math.max(up, Math.min(f, 40)); }
     });
     var gosiwon = b.ptGosiwon > 0 || /고시원|다중생활/.test((b.useNm || '') + (b.spNm || '') + (b.spType || ''));
@@ -96,14 +97,26 @@ window.Bld3D = (function () {
   function moving() { isMoving = true; clearTimeout(stillTimer); }
   function idle() { isMoving = false; arm(); }
 
+  /* iframe 은 3D 상자가 자리를 차지하고 있을 때(크기 0 아님)만 만든다. 크기 0 에서 엔진을 켜면 캔버스 비율 · 카메라 계산이 어긋난다 (리뷰 11).
+     상자는 .pre(visibility: hidden) 여도 크기는 있다. 오른쪽 패널이 닫혀 display 가 없을 때만 0 → 그때는 만들지 않고 다음 show / open 때 다시 본다 */
   function ensureFrame() {
-    if (frame) return;
-    frame = document.getElementById('b3Frame');
+    if (frame) return true;
+    var el = document.getElementById('b3Frame'), w = el ? el.offsetWidth : 0, h = el ? el.offsetHeight : 0;
+    if (!w || !h) { console.log('[bld3d] iframe 미룸 · 3D 상자 크기 ' + w + 'x' + h); return false; }
+    console.log('[bld3d] iframe 생성 · 3D 상자 크기 ' + w + 'x' + h);
+    frame = el;
     frame.src = Common.url('resources/vworld3d/bld3d-frame.html');
+    return true;
   }
+  function post(msg) { frame.contentWindow.postMessage(msg, location.origin); }
   function send(msg) {
-    if (!ready) { queued = msg; return; }
-    frame.contentWindow.postMessage(msg, location.origin);
+    if (ready) { post(msg); return; }
+    queue = queue.filter(function (m) { return m.type !== msg.type; });   // 같은 종류는 마지막 것만 (show 중복 제거)
+    queue.push(msg);
+  }
+  function flush() {                                          // 'ready' : show 먼저, 나머지 옵션은 보낸 순서대로
+    var q = queue; queue = [];
+    q.filter(function (m) { return m.type === 'show'; }).concat(q.filter(function (m) { return m.type !== 'show'; })).forEach(post);
   }
 
   function show(d) {
@@ -126,7 +139,7 @@ window.Bld3D = (function () {
       if (my !== seq) return;
       ensureFrame();
       if (ready) send({ type: 'resume' });
-      if (d.residents && d.residents.hhCnt) MapApi.residents(b.bldId).done(go).fail(function () { go([]); });
+      if (d.residents && d.residents.hhCnt) MapApi.floorStat(b.bldId).done(go).fail(function () { go([]); });
       else go([]);
     });
   }
@@ -135,6 +148,8 @@ window.Bld3D = (function () {
   function open() {
     $box.removeClass('pre').prop('hidden', false); $('#btn3d').addClass('on');
     if (!drawn && $('#b3Fail').prop('hidden')) { loading(true); armLoad(); }   // 아직 그리는 중이면 로딩 레이어 + 15초 재기 시작
+    if (!frame && lastD) show(lastD);                         // 크기 0 이라 미뤘던 iframe 을 이제 만든다 (리뷰 11)
+    else if (ready) send({ type: 'resize' });                 // 보인 뒤 엔진 크기 한 번 다시 맞춤
   }
   function close() { $box.addClass('pre').removeClass('big'); $('#btn3d').removeClass('on'); clearTimeout(loadTimer); }   // 로딩 중에 닫으면 타이머도 정리
   /* 상세 패널의 [3D 보기] 버튼 : 상세가 열려 뒤에서 그리는 동안은 스피너가 도는 "3D 준비 중"(.loading), 다 그려지면 아이콘 + "3D 보기"(.ready).
@@ -149,7 +164,14 @@ window.Bld3D = (function () {
     if (frame || !inBuildingZoom || !$box) return;
     warmTimer = setTimeout(function () { whenStill(ensureFrame); }, 1000);
   }
-  function hide() { seq++; drawn = false; clearTimeout(loadTimer); if ($box) close(); $('#btn3d').prop('hidden', true); if (ready) { send({ type: 'clear' }); send({ type: 'pause' }); } }
+  /* 닫기 : 엔진 준비 여부와 상관없이 대기 메시지를 전부 비운다 (리뷰 1). 준비 전이면 queue 가 빈 채로 'ready' 를 맞으므로 묵은 show 가 실행되지 않고,
+     iframe 은 받은 show 가 없으면 그리기를 멈춘 채로 있는다. 준비 뒤면 지우고 멈추라고 보낸다 */
+  function hide() {
+    seq++; drawn = false; clearTimeout(loadTimer); queue = [];
+    if ($box) close();
+    $('#btn3d').prop('hidden', true);
+    if (ready) { send({ type: 'clear' }); send({ type: 'pause' }); }
+  }
 
   function init() {
     $box = $('#bld3d');
@@ -157,7 +179,7 @@ window.Bld3D = (function () {
     window.addEventListener('message', function (e) {
       if (e.origin !== location.origin || !e.data || e.data.src !== 'bld3d') return;
       var m = e.data;
-      if (m.type === 'ready') { ready = true; if (queued) { var q = queued; queued = null; send(q); } }
+      if (m.type === 'ready') { ready = true; console.log('[bld3d] ready 받음 · 대기 메시지 ' + queue.map(function (x) { return x.type; }).join(', ')); flush(); }
       else if (m.type === 'status') status(m.text);
       else if (m.type === 'error') { status(m.text, true); loadFail(); }
       else if (m.type === 'drawn') {

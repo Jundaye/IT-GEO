@@ -337,9 +337,11 @@ $(function () {
     state.scenRun = scen; state.modRun = scenMod;
     state.criteria = c;
     state.cellByLevel = {};
-    /* 리스트 범위 = 지금 보이는 화면 (2026-11-17). 예전에는 비워 둬서 구 전체가 나오고 [재검색] 을 눌러야 화면 범위가 됐다.
-       동(법정동 · 행정동)을 골라 둔 상태면 지도 핀 · 도넛도 그 동만 그리므로 리스트도 그 동 범위 그대로 둔다 */
-    state.bbox = (state.dong || state.adms.length) ? null : currentBbox();
+    /* 리스트 범위 (CLAUDE.md 5-1, 2026-11-19 리뷰 8)
+         ① 구 · 동을 고르지 않았을 때      = 지금 지도 화면(bbox) 안의 건물
+         ② 상단에서 구 · 동을 고정했을 때  = 고정한 구 · 동 전체 (화면 범위 무시 → 화면에 걸친 이웃 구 건물이 섞이지 않는다)
+         ③ [이 지역에서 재검색]            = 구 · 동 고정과 상관없이 언제나 지도 화면(bbox) — 위 #btnRefetch */
+    state.bbox = (state.gu || state.dong || state.adms.length) ? null : currentBbox();
     showResultPanel();
     $('#btnRefetch').removeClass('show');
     loadGus();
@@ -365,7 +367,7 @@ $(function () {
       if (m.kind === 'cluster') flyTo(m.data.lat, m.data.lng, Math.max(C.ZOOM.BUILDING, zoomNow() + 1));   // 묶음 → 확대
       else {
         selectBuilding(m.data, false);
-        if (street.on) openPano(LL(m.data.lat, m.data.lng), m.data);   // 로드뷰 모드 : 그 건물 앞 로드뷰를 열고 사진 속에 건물 핀 1개 (2차 O)
+        if (street.on) { street.markAt = Date.now(); openPano(LL(m.data.lat, m.data.lng), m.data); }   // 로드뷰 모드 : 그 건물 앞 로드뷰를 열고 사진 속에 건물 핀 1개 (2차 O)
       }
     },
     onGuClick: function (g) { flyTo(g.lat, g.lng, C.ZOOM.CLUSTER_MIN); },
@@ -699,7 +701,8 @@ $(function () {
   applyMapType();
 
   /* 로드뷰 : 켜면 파란 도로선(StreetLayer), 지도를 누르면 그 위치의 파노라마를 지도 영역 위에. 네이버 스크립트의 submodules=panorama 필요 */
-  var street = { on: false, layer: null, pano: null, click: null, mark: null, target: null, aim: false };
+  /* markAt = 건물 마커를 누른 시각, sameT = 같은 촬영 지점일 때 핀 · 시선을 바로 맞추는 예약 (리뷰 6) */
+  var street = { on: false, layer: null, pano: null, click: null, mark: null, target: null, aim: false, markAt: 0, sameT: null };
   var hasPano = function () { return live() && !!naver.maps.StreetLayer && !!naver.maps.Panorama; };
   function closePano() { $('#panoWrap').removeClass('open'); clearPanoMark(); }
 
@@ -719,6 +722,7 @@ $(function () {
   }
   function clearPanoMark() {
     if (street.mark) { street.mark.setMap(null); street.mark = null; }
+    clearTimeout(street.sameT);
     street.target = null; street.aim = false;
     $('#panoTarget').removeClass('show');
   }
@@ -757,7 +761,7 @@ $(function () {
     if (!street.pano) {
       street.pano = new naver.maps.Panorama('pano', { position: coord, pov: { pan: 0, tilt: PANO_TILT, fov: 100 } });
       naver.maps.Event.addListener(street.pano, 'init', placePanoMark);            // 처음 만들 때 (공식 예제와 같은 시점)
-      naver.maps.Event.addListener(street.pano, 'pano_changed', placePanoMark);    // 위치를 옮긴 뒤
+      naver.maps.Event.addListener(street.pano, 'pano_changed', function () { clearTimeout(street.sameT); placePanoMark(); });    // 위치를 옮긴 뒤
       naver.maps.Event.addListener(street.pano, 'pano_status', function (status) {
         if (status === 'ERROR') { closePano(); Common.toast('이 위치에는 로드뷰가 없습니다. 파란 도로선 위를 눌러 주세요.'); }
       });
@@ -766,6 +770,9 @@ $(function () {
       street.pano.setPosition(coord);
       var pov = street.pano.getPov();                   // 보던 방향은 그대로, 상하 각도만 다시 아래로
       street.pano.setPov({ pan: pov.pan, tilt: PANO_TILT, fov: pov.fov });
+      /* 옆 건물이 지금 보는 촬영 지점을 그대로 쓰면 pano_changed 가 오지 않을 수 있다 (리뷰 6) → 0.5초 안에 안 오면 여기서 바로 핀 · 시선을 맞춘다.
+         street.aim 이 아직 켜져 있다 = 이 건물로 placePanoMark 가 아직 안 돌았다. 맞춘 뒤에는 aim 이 꺼지므로 다음 화살표 이동 때 시야가 튀지 않는다 */
+      if (target) street.sameT = setTimeout(function () { if (street.target === target && street.aim) placePanoMark(); }, 500);
     }
   }
   $(window).on('resize', fitPano);
@@ -781,7 +788,8 @@ $(function () {
     if (on) {
       if (!street.layer) street.layer = new naver.maps.StreetLayer();
       street.layer.setMap(map);
-      street.click = naver.maps.Event.addListener(map, 'click', function (e) { openPano(e.coord); });
+      /* 건물 마커를 누르면 지도 click 도 같이 온다 → 그 click 으로 다시 열면 방금 정한 건물(핀 · 이름표 · 시선)이 지워지므로 마커 직후의 click 은 넘긴다 */
+      street.click = naver.maps.Event.addListener(map, 'click', function (e) { if (Date.now() - street.markAt < 400) return; openPano(e.coord); });
       Common.toast('파란 도로선 위를 누르면 로드뷰가 열립니다.');
     } else {
       if (street.layer) street.layer.setMap(null);

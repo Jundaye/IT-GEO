@@ -19,6 +19,9 @@ public class MapController {
 	@Value("${app.naver.client-id}")
 	String naverClientId;
 
+	@Value("${app.vworld.api-key:}")
+	String vworldKey;
+
 	@Value("${app.analysis.score-min:80}")
 	int scoreMin;
 
@@ -42,6 +45,7 @@ public class MapController {
 		model.addAttribute("openBldId", bldId == null ? "" : bldId);
 		model.addAttribute("openMsg", openMsg);
 		model.addAttribute("naverClientId", naverClientId);
+		model.addAttribute("vworldKey", vworldKey);                            // 건물 3D (resources/vworld3d/bld3d-frame.html 이 부모 창에서 읽는다)
 		model.addAttribute("criteria", criteria);                              // 왼쪽 패널 기본값 (동 목록은 api/map/dongs.do)
 		return "map";
 	}

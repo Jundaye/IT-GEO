@@ -29,6 +29,7 @@ window.MapApi = (function () {
 
     /* 거주 가구 탭 (가림 카드) */
     residents: function (bldId) { return api('GET', 'api/map/residents.do', { bldId: bldId }); },
+    floorStat: function (bldId) { return api('GET', 'api/map/floorStat.do', { bldId: bldId }); },   // 3D 층 색칠용 층별 집계 (개인정보 없음)
 
     /* 정보 확인하기 : 동·호수만 */
     resident: function (residentId) { return api('GET', 'api/map/resident.do', { residentId: residentId }); },

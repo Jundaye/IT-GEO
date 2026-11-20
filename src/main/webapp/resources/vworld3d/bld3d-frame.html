@@ -13,14 +13,18 @@
 <style>
   html,body,#vmap{margin:0;width:100%;height:100%;background:#1b1b1e;overflow:hidden}
 </style>
-<!-- 브이월드 인증키 : 발급 때 등록한 서비스 URL(http://localhost:8080)에서만 동작 -->
-<script src="https://map.vworld.kr/js/webglMapInit.js.do?version=3.0&apiKey=0D3C160C-825C-4C22-83FB-3A0FD69AA0AE"></script>
+<!-- 브이월드 인증키 : app.properties(app.vworld.api-key) → MapController → map.jsp 의 window.APP_VWORLD_KEY. 이 페이지에는 키를 적지 않는다.
+     발급 때 등록한 서비스 URL(http://localhost:8080)에서만 동작. 브이월드 로더가 document.write 를 쓰므로 여기서도 document.write 로 넣는다 -->
+<script>
+  var VW_KEY = '';
+  try { VW_KEY = (parent && parent.APP_VWORLD_KEY) || ''; } catch (e) {}
+  document.write('<script src="https://map.vworld.kr/js/webglMapInit.js.do?version=3.0&apiKey=' + encodeURIComponent(VW_KEY) + '"><\/script>');
+</script>
 </head>
 <body>
 <div id="vmap"></div>
 <script>
 (function () {
-  var VW_KEY = '0D3C160C-825C-4C22-83FB-3A0FD69AA0AE';
   /* 바닥 지도 : 브이월드 WMTS 레이어 이름. 'Base'(밝은 일반지도) · 'white'(흰 지도) · 'midnight'(어두운 지도) · null(브이월드 기본 항공사진 그대로)
      건물은 별도 3D 타일이라 바닥을 바꿔도 실제 외관 사진이 그대로 남는다 */
   var GROUND = 'midnight';
@@ -29,6 +33,7 @@
   var T = { script: Math.round(performance.now()) };
   function ms() { return Math.round(performance.now()); }
   var viewer = null, ds = null, pending = null, autoRotate = false, drawSeq = 0;
+  var placed = false;   // 카메라가 건물에 고정된 뒤에만 자동 회전 (그리는 중에 돌리면 지구 중심을 축으로 돌아 카메라가 멀리 날아간다)
   /* 선택 건물만 보기 : onlyOne 이 켜져 있으면 브이월드 3D 건물 중 targetKey(선택 건물 속성)와 같은 것만 보인다 */
   var onlyOne = true, targetKey = null, keyVer = 0, hooked = [], clipRing = null;
 
@@ -42,6 +47,11 @@
     post('error', { text: '브이월드 스크립트를 못 불러왔습니다. 인증키의 서비스 URL(http://localhost:8080) 등록을 확인하세요.' });
     return;
   }
+  /* 브이월드 초기화 완료 신호 (리뷰 11). vw.Map.start() 는 엔진을 다 켠 뒤 vw.ws3dInitCallBack() 을 부르고, 바로 이어서 카메라를 initPosition 으로 옮긴다.
+     예전에는 viewer 객체가 생기자마자 'ready' 를 보내서, 그 사이에 건물을 그리면 브이월드가 뒤늦게 카메라를 초기 위치(높이 수 km)로 되돌렸다
+     → 지구가 휜 지도만 보이고 건물이 없었다. 이제 이 신호를 받은 뒤에만 'ready' 를 보낸다 */
+  var inited = false;
+  vw.ws3dInitCallBack = function () { inited = true; console.log('[bld3d] 엔진 초기화 완료 (브이월드 콜백) ' + ms() + 'ms'); };
   try {
     var map = new vw.Map();
     map.setOption({
@@ -55,8 +65,13 @@
 
   var tries = 0;
   (function wait() {
-    if (window.ws3d && ws3d.viewer && ws3d.viewer.scene && window.Cesium) { onReady(); return; }
-    if (++tries > 150) { post('error', { text: '브이월드 3D 뷰어를 찾지 못했습니다. F12 콘솔을 확인해 주세요.' }); return; }
+    var hasViewer = window.ws3d && ws3d.viewer && ws3d.viewer.scene && window.Cesium;
+    if (hasViewer && inited) { onReady(); return; }           // 콜백 뒤의 다음 타이머라, 브이월드의 초기 카메라 이동 호출도 이미 지나간 뒤다
+    if (++tries > 150) {
+      if (hasViewer) { console.warn('[bld3d] 브이월드 초기화 콜백이 오지 않아 그대로 시작합니다'); onReady(); }
+      else post('error', { text: '브이월드 3D 뷰어를 찾지 못했습니다. F12 콘솔을 확인해 주세요.' });
+      return;
+    }
     setTimeout(wait, 200);
   })();
 
@@ -71,7 +86,8 @@
     /* 바뀐 게 있을 때만 그린다 (가만히 있으면 GPU 를 거의 안 씀) */
     viewer.scene.requestRenderMode = true;
     viewer.scene.maximumRenderTimeChange = Infinity;
-    viewer.clock.onTick.addEventListener(function () { if (autoRotate) { viewer.camera.rotateRight(0.004); viewer.scene.requestRender(); } });
+    viewer.clock.onTick.addEventListener(function () { if (autoRotate && placed) { viewer.camera.rotateRight(0.004); viewer.scene.requestRender(); } });
+    console.log('[bld3d] ready 전송 · 캔버스 ' + viewer.canvas.clientWidth + 'x' + viewer.canvas.clientHeight);
     post('ready');
     if (pending) { var p = pending; pending = null; show(p); }
     else viewer.useDefaultRenderLoop = false;    // 미리 켜 두기만 한 상태 : 마커를 누를 때까지 그리지 않음
@@ -100,7 +116,8 @@
     if (e.origin !== ORIGIN || !e.data) return;
     if (e.data.type === 'show') { if (viewer) show(e.data); else pending = e.data; }
     if (e.data.type === 'rotate') autoRotate = !!e.data.on;
-    if (e.data.type === 'clear' && ds) { ds.entities.removeAll(); autoRotate = false; }
+    if (e.data.type === 'clear' && ds) { drawSeq++; ds.entities.removeAll(); autoRotate = false; }   // drawSeq++ : 그리던 중이면 그만둔다 (닫은 뒤 뒤늦게 그려지지 않게)
+    if (e.data.type === 'resize' && viewer) viewer.resize();                        // 3D 상자가 보이게 된 뒤 캔버스 크기 다시 맞춤
     if (e.data.type === 'pause' && viewer) viewer.useDefaultRenderLoop = false;     // 상세 패널 닫힘 : 그리기 멈춤
     if (e.data.type === 'resume' && viewer) { viewer.useDefaultRenderLoop = true; viewer.scene.requestRender(); }
     if (viewer) viewer.scene.requestRender();
@@ -280,7 +297,11 @@
   /* ---------- 4. 그리기 ---------- */
   function show(msg) {
     var seq = ++drawSeq, b = msg.bld;
+    console.log('[bld3d] show 수신 · 건물 ' + b.id + ' (' + (msg.visible ? '보이는 상태' : '미리 그리기') + ')');
     viewer.useDefaultRenderLoop = true;
+    placed = false;
+    viewer.resize();
+    viewer.camera.cancelFlight();              // 브이월드 초기 카메라 이동이 아직 날아가는 중이면 멈춘다
     var t0 = ms(), tFp = null;
     ds.entities.removeAll();
     targetKey = null; clipRing = null; keyVer++; applyClip();   // 새 건물 고르기 전까지는 다 보이게
@@ -293,6 +314,7 @@
       offset: new Cesium.HeadingPitchRange(rad(25), rad(-28), Math.max(90, upCnt * 14)),
       duration: msg.visible ? 1.2 : 0      // 안 보이는 채로 미리 그릴 땐 날아가는 연출 없이 바로 이동
     });
+    console.log('[bld3d] 카메라 이동 · 건물 위치 ' + b.lng + ', ' + b.lat);
     var fpP = fetchFootprint(b.lng, b.lat).then(function (r) { tFp = ms() - t0; return r; }, function (e) { tFp = ms() - t0; console.warn('[bld3d] 외곽선 못 받음', e); return null; });
     delay(msg.visible ? 1300 : 150).then(function () { return fpP; }).then(function (fp) {
       if (seq !== drawSeq) return;
@@ -347,7 +369,10 @@
     // 360° 회전 : 건물 중심에 카메라를 묶는다 (왼쪽 드래그 = 건물 둘레로 회전, 휠 = 확대/축소)
     var center = Cesium.Cartesian3.fromDegrees(c[0], c[1], ground + (top - ground) / 2 - (down.length ? 1.5 : 0));
     var range = Math.max(45, (top - ground + down.length * bh) * 2.6);
+    viewer.camera.cancelFlight();
     viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(rad(25), rad(-22), range));
+    placed = true;
+    console.log('[bld3d] 건물 그림 · 카메라를 건물에 고정 (거리 ' + Math.round(range) + 'm, 카메라 높이 ' + Math.round(viewer.camera.positionCartographic.height) + 'm) · 건물 레이어 ' + tilesets().length + '개 켬');
     clipRing = ring;
     var mySeq = drawSeq;
     setTimeout(function () { pickTarget(mySeq, ring, c, ground, 0); }, 900);

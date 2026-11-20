@@ -18,6 +18,7 @@ import wellfair.to.BuildingMarkerTO;
 import wellfair.to.BuildingTO;
 import wellfair.to.ClusterTO;
 import wellfair.to.DongTO;
+import wellfair.to.FloorStatTO;
 import wellfair.to.GuTO;
 import wellfair.to.MemberTO;
 import wellfair.to.PageTO;
@@ -33,6 +34,7 @@ import wellfair.to.ResidentTO;
  *  api/map/building.do   건물 상세                                ?bldId&기준값
  *  api/map/checked.do    분석 전 현장 확인됨 핀                     ?gu&dong&adms
  *  api/map/residents.do  거주 가구 탭                              ?bldId
+ *  api/map/floorStat.do  3D 층 색칠용 층별 집계 (개인정보 없음)      ?bldId
  *  api/map/resident.do   정보 확인하기(동·호수)                     ?residentId
  *
  * 구청 계정 (15단계 A) : 목록류는 gu 를 세션 구로 강제(scope), 건물·가구 상세는 그 건물의 sgg_cd 가 내 구와 다르면 403 {ok:false, msg}.
@@ -97,6 +99,13 @@ public class MapRESTController {
 	public List<ResidentTO> residents(@RequestParam("bldId") String bldId, HttpSession session) {
 		assertMyGu(member(session), guOfBuilding(bldId));
 		return residentService.getResidentList(bldId);
+	}
+
+	// 3D 층 색칠 : 층별 가구 수 · 취약 가구 수만 (이름 · 나이 없음). 구청 계정은 소속 구 건물만
+	@GetMapping(value = "api/map/floorStat.do", produces = "application/json;charset=UTF-8")
+	public List<FloorStatTO> floorStat(@RequestParam("bldId") String bldId, HttpSession session) {
+		assertMyGu(member(session), guOfBuilding(bldId));
+		return residentService.getFloorStat(bldId);
 	}
 
 	// 정보 확인하기 (동·호수). residentId → bld_id → sgg_cd 로 관할 확인

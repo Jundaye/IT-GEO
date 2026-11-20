@@ -6,6 +6,7 @@ import org.apache.ibatis.session.SqlSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import wellfair.to.FloorStatTO;
 import wellfair.to.ResidentCountTO;
 import wellfair.to.ResidentTO;
 
@@ -18,6 +19,10 @@ public class ResidentDAO {
 
 	public ResidentCountTO getResidentCount(String bldId) {
 		return session.selectOne("mapper-resident.getResidentCount", bldId);
+	}
+
+	public List<FloorStatTO> getFloorStat(String bldId) {
+		return session.selectList("mapper-resident.getFloorStat", bldId);
 	}
 
 	public List<ResidentTO> getResidentList(String bldId) {
