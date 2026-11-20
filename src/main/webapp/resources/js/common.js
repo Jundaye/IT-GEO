@@ -90,5 +90,52 @@ window.Common = (function () {
 
   function num(n) { return Number(n || 0).toLocaleString(); }
 
-  return { ctx: CTX, esc: esc, url: url, api: api, toast: toast, dialog: dialog, shortAddr: shortAddr, num: num };
+  /* 모양만 있는 버튼 (헤더 데이터 업데이트 · 도움말 등) : data-soon 문구를 토스트로 */
+  $(document).on('click', '.hd-soon, [data-soon]', function (e) {
+    e.preventDefault();
+    toast($(this).attr('data-soon') || '연동 예정입니다.');
+  });
+
+  /* 라이트 / 다크 모드 : <html data-theme="light"> + localStorage "wf-theme" (처음 칠할 때는 head.jspf 가 먼저 붙인다).
+     바꾸면 document 에 'themechange' 이벤트 → 차트처럼 색을 JS 로 읽은 곳은 이걸 듣고 다시 그린다 (dashboard.js) */
+  function theme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+  function syncThemeBtn() {
+    var light = theme() === 'light';
+    $('#btnTheme').attr({ 'aria-pressed': String(light), title: light ? '다크 모드로 전환' : '라이트 모드로 전환' });
+  }
+  function setTheme(t) {
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('wf-theme', t === 'light' ? 'light' : 'dark'); } catch (e) {}
+    syncThemeBtn();
+    $(document).trigger('themechange', [theme()]);
+  }
+  $(function () { syncThemeBtn(); });
+  $(document).on('click', '#btnTheme', function () { setTheme(theme() === 'light' ? 'dark' : 'light'); });
+
+  /**
+   * 대시보드 "이어서 보기" 기록 (DashboardRESTController recent.do → recent_view, 탭마다 마지막 1건).
+   * 화면을 열면 자동으로 한 번. 화면 안에서 보는 대상이 바뀌면 Common.recent({ title, sub }) 로 다시 부르면 된다 (예: 지도에서 동 분석)
+   */
+  var RECENT_SUB = { 'map.do': '지도 · 분석', 'fieldlist.do': '리스트 목록', 'fielddetail.do': '현장 확인 중', 'fieldedit.do': '리스트 편집 중', 'archive.do': '보관함 목록', 'archivedetail.do': '건물 확인 이력' };
+  function recent(opt) {
+    var $m = $('#recentMeta'), menu = $m.data('menu');
+    if (menu !== 'map' && menu !== 'field' && menu !== 'archive') return;
+    var page = location.pathname.split('/').pop();
+    if (!RECENT_SUB[page]) return;
+    opt = opt || {};
+    var h1 = $.trim($('.page h1').first().clone().children().remove().end().text());
+    $.ajax({
+      url: url('api/dashboard/recent.do'), method: 'POST', dataType: 'json',
+      data: {
+        menu: menu,
+        url: page + location.search,
+        title: opt.title || $m.attr('data-title') || h1,
+        sub: opt.sub || $m.attr('data-sub') || RECENT_SUB[page]
+      }
+    });   /* 실패해도 화면에는 알리지 않는다 */
+  }
+  $(function () { recent(); });
+
+  return { ctx: CTX, esc: esc, url: url, api: api, toast: toast, dialog: dialog, shortAddr: shortAddr, num: num, theme: theme, setTheme: setTheme, recent: recent };
 })();

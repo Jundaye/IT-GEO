@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -18,16 +19,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import wellfair.common.ForbiddenException;
 import wellfair.dao.ArchiveDAO;
+import wellfair.dao.MobileDAO;
 import wellfair.to.AnalysisCriteriaTO;
 import wellfair.to.ArchiveDetailTO;
 import wellfair.to.ArchiveRowTO;
 import wellfair.to.ArchiveTO;
 import wellfair.to.BuildingDetailTO;
-import wellfair.to.DashboardTO;
 import wellfair.to.FieldCheckTO;
 import wellfair.to.MemberTO;
 import wellfair.to.MemoTO;
 import wellfair.to.PageTO;
+import wellfair.to.PhotoTO;
+import wellfair.to.RecordDetailTO;
 import wellfair.to.RecordTO;
 import wellfair.to.StatusCountTO;
 import wellfair.to.TransferTO;
@@ -75,10 +78,22 @@ public class ArchiveService {
 	@Autowired
 	MemberService memberService;
 
+	@Autowired
+	MobileDAO mobileDao;
+
 	// 탭 숫자 (신규 / 진행중 / 완료됨). gu 가 있으면 그 구의 보관함만 (구청 계정 = 소속 구, 서울시청 = 고른 구)
 	public StatusCountTO getStatusCount(long userId, String gu) {
 		StatusCountTO cnt = dao.getStatusCount(userId, gu);
 		return cnt == null ? new StatusCountTO() : cnt;
+	}
+
+	/** 지도 상단 현황 패널 "지금 처리할 일" : 조사 대기(보관함 신규) · 기한 임박 · 결과 확인 필요(이관 회신 대기) */
+	public Map<String, Integer> getTodoSummary(long userId, String gu) {
+		Map<String, Integer> m = new LinkedHashMap<>();
+		m.put("todo", getStatusCount(userId, gu).getTodo());
+		m.put("due", dao.getDueCount(userId, gu));
+		m.put("reply", dao.getReplyWaitCount(userId, gu));
+		return m;
 	}
 
 	/**
@@ -209,15 +224,6 @@ public class ArchiveService {
 		return dao.deleteFactors(userId, factorIds);
 	}
 
-	// 대시보드 조각
-	public List<DashboardTO.DongStatusTO> getStatusByDong(long userId, String gu) {
-		return dao.getStatusByDong(userId, gu);
-	}
-
-	public List<DashboardTO.MonthCountTO> getMonthlyDone(long userId, int months, String gu) {
-		return dao.getMonthlyDone(userId, months, gu);
-	}
-
 	// ================= 05 건물 확인 이력 (archivedetail.do) =================
 
 	/** 한 화면 분량. 구청 계정은 소속 구 건물만 (userGu). 건물이 없으면 null */
@@ -242,6 +248,7 @@ public class ArchiveService {
 			parseCheck(r);
 			if (r.getScoreAdj() != null) adj += r.getScoreAdj();
 		}
+		fillAppDetail(recs);
 		d.setRecords(recs);
 		d.setTransfers(dao.getTransferList(bldId));
 		d.setMemos(dao.getMemoList(bldId));
@@ -259,6 +266,44 @@ public class ArchiveService {
 			d.setTransferDept(t.getDeptNm() + " " + t.getReqType());
 		}
 		return d;
+	}
+
+	/**
+	 * 모바일 앱에서 저장한 기록이면 거주자 상태 · 항목 점수 · 필요한 지원 · 사진을 붙인다 (survey_record_detail · survey_photo).
+	 * 06_mobile_record.sql 을 아직 안 돌린 DB 에서도 05 화면은 그대로 보이도록 DB 오류는 무시한다.
+	 */
+	@SuppressWarnings("unchecked")
+	private void fillAppDetail(List<RecordTO> recs) {
+		if (recs.isEmpty()) return;
+		List<Long> ids = new ArrayList<>();
+		Map<Long, RecordTO> byId = new LinkedHashMap<>();
+		for (RecordTO r : recs) { ids.add(r.getRecordId()); byId.put(r.getRecordId(), r); }
+		try {
+			for (RecordDetailTO d : mobileDao.getRecordDetails(ids)) {
+				RecordTO r = byId.get(d.getRecordId());
+				if (r == null) continue;
+				r.setSource(d.getSource());
+				r.setResidentStatus(d.getResidentStatus());
+				if (d.getSupports() != null && !d.getSupports().isBlank()) r.setSupports(Arrays.asList(d.getSupports().split(",")));
+				if (d.getScores() != null && !d.getScores().isBlank()) {
+					try {
+						Map<String, Object> m = JSON.readValue(d.getScores(), Map.class);
+						for (String k : MobileService.SCORE_LABELS.keySet()) {
+							Object v = m.get(k);
+							if (v instanceof Number) r.getScores().put(k, ((Number) v).intValue());
+						}
+					} catch (Exception ignore) {
+						// 깨진 JSON 은 건너뜀
+					}
+				}
+			}
+			for (PhotoTO p : mobileDao.getPhotos(ids)) {
+				RecordTO r = byId.get(p.getRecordId());
+				if (r != null) r.getPhotos().add(p);
+			}
+		} catch (DataAccessException e) {
+			// survey_record_detail / survey_photo 테이블이 없음 (06 미실행)
+		}
 	}
 
 	/** factor_check JSON → checks(키→Y/N/?) · added · checkText · confirmed */
@@ -298,7 +343,7 @@ public class ArchiveService {
 	 * 그 건물이 내 현장확인 리스트에 없으면 IllegalStateException("현장확인 리스트에 먼저 담아 주세요").
 	 * 방문 일시가 형식에 안 맞거나 미래, 방문 결과가 정해진 값이 아니면 IllegalArgumentException (15단계 D-12)
 	 */
-	public void addCheck(long userId, String bldId, String visitedAt, String result, Map<String, String> checks,
+	public long addCheck(long userId, String bldId, String visitedAt, String result, Map<String, String> checks,
 			List<String> added, String content, Integer scoreAdj) {
 		Long planId = dao.getPlanByBld(userId, bldId);
 		if (planId == null) throw new IllegalStateException("현장확인 리스트에 먼저 담아 주세요.");
@@ -326,6 +371,7 @@ public class ArchiveService {
 		int a = scoreAdj == null ? 0 : Math.max(-10, Math.min(10, scoreAdj));
 		c.setScoreAdj(a == 0 ? null : a);
 		fieldService.addCheck(c);
+		return c.getRecordId() == null ? 0 : c.getRecordId();
 	}
 
 	/** 방문 일시 'yyyy-MM-ddTHH:mm' 또는 'yyyy-MM-dd HH:mm'(초가 붙어도 됨) → 'yyyy-MM-dd HH:mm:ss'. 비었으면 null(= 지금).

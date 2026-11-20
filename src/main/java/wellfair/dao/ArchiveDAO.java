@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import wellfair.to.AnalysisCriteriaTO;
 import wellfair.to.ArchiveRowTO;
 import wellfair.to.ArchiveTO;
-import wellfair.to.DashboardTO;
 import wellfair.to.MemoTO;
 import wellfair.to.RecordTO;
 import wellfair.to.StatusCountTO;
@@ -29,6 +28,20 @@ public class ArchiveDAO {
 		p.put("userId", userId);
 		p.put("gu", gu);
 		return session.selectOne("mapper-archive.getStatusCount", p);
+	}
+
+	public int getDueCount(long userId, String gu) {
+		Map<String, Object> p = new HashMap<>();
+		p.put("userId", userId);
+		p.put("gu", gu);
+		return session.selectOne("mapper-archive.getDueCount", p);
+	}
+
+	public int getReplyWaitCount(long userId, String gu) {
+		Map<String, Object> p = new HashMap<>();
+		p.put("userId", userId);
+		p.put("gu", gu);
+		return session.selectOne("mapper-archive.getReplyWaitCount", p);
 	}
 
 	public ArchiveTO getListByCriteria(ArchiveTO to) {
@@ -65,20 +78,6 @@ public class ArchiveDAO {
 		return session.delete("mapper-archive.deleteFactors", p);
 	}
 
-	public List<DashboardTO.DongStatusTO> getStatusByDong(long userId, String gu) {
-		Map<String, Object> p = new HashMap<>();
-		p.put("userId", userId);
-		p.put("gu", gu);
-		return session.selectList("mapper-archive.getStatusByDong", p);
-	}
-
-	public List<DashboardTO.MonthCountTO> getMonthlyDone(long userId, int months, String gu) {
-		Map<String, Object> p = new HashMap<>();
-		p.put("userId", userId);
-		p.put("months", months);
-		p.put("gu", gu);
-		return session.selectList("mapper-archive.getMonthlyDone", p);
-	}
 
 	// ---------- 05 건물 확인 이력 ----------
 	public ArchiveTO getFactorByBld(long userId, String bldId) {

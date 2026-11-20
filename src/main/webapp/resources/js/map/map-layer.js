@@ -4,6 +4,7 @@
  *  - 가중치 = 위험 유형 4묶음 (주거 공간 · 건물 상태 · 침수 위험 · 경제 여건), 합계 항상 100 (CLAUDE.md 5-1 "가중치·분석 실행·도넛")
  *      슬라이더 하나를 움직이면 나머지 묶음이 비율대로 줄거나 늘어 합 100 유지 (5 단위, 끝수는 가장 큰 묶음에서 맞춤)
  *      묶음의 요인이 전부 꺼지면 그 묶음은 0 으로 잠기고 나머지끼리 합 100
+ *  - 상황 버튼(기본값 · 폭우 · 폭염 · 한파, 피그마 02) : 누르면 기본 조건 + 그 시나리오로 되돌리고 요인 목록을 잠금 필터로 덮는다. [직접 조정 >] 으로 풀어 고친다
  *  - 조건이 바뀌어도 지도는 그대로. [분석 실행](dirty) 을 눌러야 onRun(getCriteria()) 로 확정된다
  *  - 슬라이더 채움(--pct) : 손잡이 왼쪽 primary, 오른쪽 어두운 회색 (map.css)
  */
@@ -11,6 +12,7 @@ window.MapLayer = (function () {
   var C = window.MAP_CONFIG;
   var STEP = C.WEIGHT_STEP || 5;
   var weights = {};      // 묶음 key → 값 (합 100)
+  var scenario = '';     // 상황 버튼 : '' 기본값 | RAIN 폭우 | HEAT 폭염 | COLD 한파 (서버 AnalysisCriteriaTO.scenario)
   var onRun = null, onToggle = null;
 
   function factorOf(key) {
@@ -94,9 +96,35 @@ window.MapLayer = (function () {
     rebalance(null);
   }
 
-  /* 현재 패널 상태 → 서버 파라미터 (요인 on/off · 기준값 · 묶음 가중치 4개) */
+  /* 요인 체크 · 기준값 슬라이더를 기본값(map-config FACTORS)으로 */
+  function resetFactors() {
+    $('[data-factor]').each(function () {
+      var $row = $(this), f = factorOf($row.data('factor'));
+      if (!f) return;
+      $row.find('.f-chk').prop('checked', f.on);
+      var $rng = $row.find('.f-rng');
+      if ($rng.length) $rng.attr({ min: f.min, max: f.max, step: f.step }).val(f.def);
+      refreshRow($row);
+    });
+  }
+
+  /* 상황 버튼 (피그마 02) : 그 상황의 기본 조건(요인 · 기준값 · 가중치 = 기본값 + 시나리오 배수)으로 되돌리고 요인 목록을 잠근다.
+     잠긴 동안에도 [가중치 조정] 은 열 수 있다 (피그마 02 가중치 조정 열림). [직접 조정 >] 을 누르면 잠금만 풀린다 (시나리오는 유지) */
+  function setScenario(scn) {
+    scenario = scn || '';
+    $('#scnTabs .scn-tab').each(function () {
+      var on = ($(this).attr('data-scn') || '') === scenario;
+      $(this).toggleClass('on', on).attr('aria-selected', String(on));
+    });
+    resetFactors();
+    resetWeights();
+    lock(true);
+  }
+  function lock(v) { $('.layer-panel').toggleClass('locked', !!v); }
+
+  /* 현재 패널 상태 → 서버 파라미터 (요인 on/off · 기준값 · 묶음 가중치 4개 · 시나리오) */
   function getCriteria() {
-    var p = { scoreMin: C.SCORE_MIN };
+    var p = { scoreMin: C.SCORE_MIN, scenario: scenario };
     C.FACTORS.forEach(function (f) {
       var $row = $('[data-factor="' + f.key + '"]');
       p[f.key + 'On'] = $row.find('.f-chk').is(':checked');
@@ -112,16 +140,17 @@ window.MapLayer = (function () {
     onRun = opts.onRun;
     onToggle = opts.onToggle;
 
-    /* 요인 행 */
-    $('[data-factor]').each(function () {
-      var $row = $(this), f = factorOf($row.data('factor'));
-      if (!f) return;
-      $row.find('.f-chk').prop('checked', f.on);
-      var $rng = $row.find('.f-rng');
-      if ($rng.length) $rng.attr({ min: f.min, max: f.max, step: f.step }).val(f.def);
-      refreshRow($row);
+    /* 요인 행 · 가중치 = 기본값, 상황 = 기본값(잠김) */
+    setScenario('');
+
+    /* 상황 버튼 · 직접 조정 */
+    $('#scnTabs').on('click', '.scn-tab', function () {
+      var scn = $(this).attr('data-scn') || '';
+      if (scn === scenario && $('.layer-panel').hasClass('locked')) return;   // 같은 상황을 다시 누르면 그대로
+      setScenario(scn);
+      dirty();
     });
-    resetWeights();
+    $('#btnUnlock').on('click', function () { lock(false); });
 
     $('.layer-panel').on('change input', '.f-rng', function () { refreshRow($(this).closest('[data-factor]')); dirty(); });
     $('.layer-panel').on('change', '.f-chk', function () {

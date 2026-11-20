@@ -44,6 +44,28 @@
 		        <include refid="mapper-archive.myFactors"/>) x
 	</select>
 
+	<!-- 지도 상단 현황 패널 "지금 처리할 일" (피그마 02 양쪽 패널 접힘). 파라미터 userId (+ gu)
+	       due   = 기한 임박 : 내 현장확인 리스트의 조사 예정일(plan_date)이 3일 안이거나 지났는데 아직 확인 기록이 없는 건물
+	       reply = 결과 확인 필요 : 내가 부서로 넘기고 아직 회신(REPLIED)이 없는 이관 건 -->
+	<select id="getDueCount" resultType="int">
+		SELECT COUNT(*)
+		  FROM survey_plan sp
+		  JOIN survey_list sl ON sl.survey_id = sp.survey_id
+		  JOIN vulnerability_factor f ON f.factor_id = sp.factor_id
+		  JOIN building b ON b.bld_id = f.bld_id
+		 WHERE sl.user_id = #{userId}
+		   <if test="gu != null and gu != ''">AND b.sgg_cd = #{gu}</if>
+		   AND sp.plan_date IS NOT NULL AND sp.plan_date &lt;= DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+		   AND NOT EXISTS (SELECT 1 FROM survey_record sr WHERE sr.plan_id = sp.plan_id)
+	</select>
+	<select id="getReplyWaitCount" resultType="int">
+		SELECT COUNT(*)
+		  FROM transfer_log t
+		  JOIN building b ON b.bld_id = t.bld_id
+		 WHERE t.user_id = #{userId} AND t.status = 'SENT'
+		   <if test="gu != null and gu != ''">AND b.sgg_cd = #{gu}</if>
+	</select>
+
 	<!-- 같은 조건(구 · 기준 JSON)으로 만든 분석 리스트가 있으면 재사용 -->
 	<select id="getListByCriteria" parameterType="wellfair.to.ArchiveTO" resultType="wellfair.to.ArchiveTO">
 		SELECT vulnerability_id, user_id, sgg_cd, title, criteria
@@ -76,6 +98,10 @@
 		     , <include refid="mapper-building.factorText"/> factor_text
 		     , DATE_FORMAT(f.evaluated_at, '%Y-%m-%d') saved_at
 		     , <include refid="mapper-archive.statusExpr"/> status
+		     <!-- 우선순위(추정) : 평시 = 저장 점수 기준 (아래 COUNT), 재해 시나리오를 고르면 = 그 시나리오로 다시 계산한 점수 기준 (pr, 저장 점수 열은 그대로) -->
+		     <choose>
+		       <when test="scenario != null and scenario != ''">, pr.rk priority_rank</when>
+		       <otherwise>
 		     , (SELECT COUNT(*) + 1
 		          FROM vulnerability_factor f2
 		          JOIN vulnerability_list l2 ON l2.vulnerability_id = f2.vulnerability_id
@@ -88,12 +114,28 @@
 		             OR (f2.vulnerability_score = f.vulnerability_score AND IFNULL(s2.vuln_hh_cnt, 0) > t.vuln_hh_cnt)
 		             OR (f2.vulnerability_score = f.vulnerability_score AND IFNULL(s2.vuln_hh_cnt, 0) = t.vuln_hh_cnt AND IFNULL(s2.priority_sum, 0) > t.priority_sum)
 		             OR (f2.vulnerability_score = f.vulnerability_score AND IFNULL(s2.vuln_hh_cnt, 0) = t.vuln_hh_cnt AND IFNULL(s2.priority_sum, 0) = t.priority_sum AND f2.bld_id &lt; f.bld_id))) priority_rank
+		       </otherwise>
+		     </choose>
 		     , (SELECT sp.survey_id FROM survey_plan sp WHERE sp.factor_id = f.factor_id ORDER BY sp.plan_id LIMIT 1) survey_id
 		     , (SELECT sl.title FROM survey_plan sp JOIN survey_list sl ON sl.survey_id = sp.survey_id WHERE sp.factor_id = f.factor_id ORDER BY sp.plan_id LIMIT 1) survey_title
 		     , (SELECT DATE_FORMAT(MAX(sr.created_at), '%Y-%m-%d') FROM survey_plan sp JOIN survey_record sr ON sr.plan_id = sp.plan_id WHERE sp.factor_id = f.factor_id) checked_at
 		  FROM vulnerability_factor f
 		  JOIN vulnerability_list l ON l.vulnerability_id = f.vulnerability_id
 		  JOIN (<include refid="mapper-building.scoredSelect"/>) t ON t.bld_id = f.bld_id
+		  <if test="scenario != null and scenario != ''">
+		  <!-- 시나리오 우선순위 : 내 보관함 전체(건물당 최근 1건)를 시나리오 점수 → 취약 가구 → 가점 합 → bld_id 순으로 줄 세운 번호 (평시 COUNT 와 같은 동점 규칙) -->
+		  LEFT JOIN (SELECT r.bld_id, ROW_NUMBER() OVER (ORDER BY r.sc DESC, r.vh DESC, r.ps DESC, r.bld_id) rk
+		               FROM (SELECT f4.bld_id, <include refid="mapper-building.scoreExpr"/> sc
+		                          , IFNULL(rs.vuln_hh_cnt, 0) vh, IFNULL(rs.priority_sum, 0) ps
+		                       FROM vulnerability_factor f4
+		                       JOIN vulnerability_list l4 ON l4.vulnerability_id = f4.vulnerability_id
+		                       JOIN building b ON b.bld_id = f4.bld_id
+		                       <include refid="mapper-building.statJoin"/>
+		                      WHERE l4.user_id = #{userId} AND l4.is_active = 1
+		                        AND f4.factor_id = (SELECT f5.factor_id FROM vulnerability_factor f5 JOIN vulnerability_list l5 ON l5.vulnerability_id = f5.vulnerability_id
+		                                             WHERE l5.user_id = #{userId} AND l5.is_active = 1 AND f5.bld_id = f4.bld_id
+		                                             ORDER BY f5.evaluated_at DESC, f5.factor_id DESC LIMIT 1)) r) pr ON pr.bld_id = f.bld_id
+		  </if>
 		 WHERE l.user_id = #{userId} AND l.is_active = 1
 		 <include refid="mapper-archive.latestOnly"/>
 		 <if test="q != null and q != ''">AND (t.addr LIKE CONCAT('%', #{q}, '%') OR t.bld_nm LIKE CONCAT('%', #{q}, '%'))</if>
@@ -239,31 +281,6 @@
 		VALUES (#{bldId}, #{fromUserId}, #{toUserId}, #{memo})
 	</insert>
 
-	<!-- ===== 대시보드 ===== -->
-	<!-- 동별 진행 현황 (내 보관함 건물이 많은 동 순) -->
-	<select id="getStatusByDong" resultType="wellfair.to.DashboardTO$DongStatusTO">
-		SELECT b.emd_nm, SUM(x.status = 'TODO') todo, SUM(x.status = 'DOING') doing, SUM(x.status = 'DONE') done
-		  FROM (SELECT f.bld_id, <include refid="mapper-archive.statusExpr"/> status <include refid="mapper-archive.myFactors"/>) x
-		  JOIN building b ON b.bld_id = x.bld_id
-		 <if test="gu != null and gu != ''">WHERE b.sgg_cd = #{gu}</if>
-		 GROUP BY b.emd_nm
-		 ORDER BY COUNT(*) DESC
-		 LIMIT 6
-	</select>
-
-	<!-- 월별 현장 확인 완료 건수 (최근 N개월). gu 가 있으면 그 구 건물만 -->
-	<select id="getMonthlyDone" resultType="wellfair.to.DashboardTO$MonthCountTO">
-		SELECT DATE_FORMAT(sr.created_at, '%Y-%m') ym, COUNT(*) cnt
-		  FROM survey_record sr
-		  JOIN survey_plan sp ON sp.plan_id = sr.plan_id
-		  JOIN survey_list sl ON sl.survey_id = sp.survey_id
-		  JOIN vulnerability_factor f ON f.factor_id = sp.factor_id
-		  JOIN building b ON b.bld_id = f.bld_id
-		 WHERE sl.user_id = #{userId}
-		   <if test="gu != null and gu != ''">AND b.sgg_cd = #{gu}</if>
-		   AND sr.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL #{months} - 1 MONTH)
-		 GROUP BY ym
-		 ORDER BY ym
-	</select>
+	<!-- 대시보드 쿼리는 mapper-dashboard.xml 로 옮김 -->
 
 </mapper>

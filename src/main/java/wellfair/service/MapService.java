@@ -159,43 +159,52 @@ public class MapService {
 		return d;
 	}
 
-	/** 점수 구성 = 위험 유형 4묶음 (10단계 규칙). 주거 공간 · 경제 여건 = 하나라도 맞으면 전부, 건물 상태 · 침수 위험 = 맞은 수 ÷ 켜진 수 */
+	/** 점수 구성 = 위험 유형 4묶음 (10단계 규칙). 주거 공간 · 경제 여건 = 하나라도 맞으면 전부, 건물 상태 · 침수 위험 = 맞은 수 ÷ 켜진 수.
+	 *  재해 시나리오면 키운 요인은 × 1.5 (SQL 과 같은 배수, AnalysisCriteriaTO.getUgrndX 등). members = { 이름, 요인 점수, 켜짐, 배수 } */
 	private List<ScoreItemTO> buildScoreItems(BuildingTO b, AnalysisCriteriaTO c) {
 		List<ScoreItemTO> items = new ArrayList<>();
 		items.add(anyGroup("space", "주거 공간", c.getSpaceW(),
-				new Object[][] { { "반지하", b.getPtUgrnd(), c.isUgrndOn() }, { "옥탑", b.getPtRooftop(), c.isRooftopOn() }, { "고시원", b.getPtGosiwon(), c.isGosiwonOn() } }));
+				new Object[][] { { "반지하", b.getPtUgrnd(), c.isUgrndOn(), c.getUgrndX() }, { "옥탑", b.getPtRooftop(), c.isRooftopOn(), c.getRooftopX() }, { "고시원", b.getPtGosiwon(), c.isGosiwonOn(), c.getGosiwonX() } }));
 		items.add(ratioGroup("bld", "건물 상태", c.getBldW(),
-				new Object[][] { { "노후 " + c.getOldYears() + "년+" + (b.getBldAge() != null ? " (" + b.getBldAge() + "년 경과)" : ""), b.getPtOld(), c.isOldOn() }, { "위반건축물", b.getPtViol(), c.isViolOn() } }));
+				new Object[][] { { "노후 " + c.getOldYears() + "년+" + (b.getBldAge() != null ? " (" + b.getBldAge() + "년 경과)" : ""), b.getPtOld(), c.isOldOn(), c.getOldX() }, { "위반건축물", b.getPtViol(), c.isViolOn(), c.getViolX() } }));
 		items.add(ratioGroup("flood", "침수 위험", c.getFloodW(),
-				new Object[][] { { "침수 " + b.getFloodCnt() + "회", b.getPtFlood(), c.isFloodOn() }, { "저지대 해발 " + b.getElevM() + "m", b.getPtLow(), c.isLowOn() } }));
+				new Object[][] { { "침수 " + b.getFloodCnt() + "회", b.getPtFlood(), c.isFloodOn(), c.getFloodX() }, { "저지대 해발 " + b.getElevM() + "m", b.getPtLow(), c.isLowOn(), c.getLowX() } }));
 		items.add(anyGroup("econ", "경제 여건", c.getEconW(),
-				new Object[][] { { "저가 주택" + (b.getPricePct() != null ? " (백분위 " + b.getPricePct() + "%)" : ""), b.getPtCheap(), c.isCheapOn() } }));
+				new Object[][] { { "저가 주택" + (b.getPricePct() != null ? " (백분위 " + b.getPricePct() + "%)" : ""), b.getPtCheap(), c.isCheapOn(), c.getCheapX() } }));
 		return items;
 	}
 
-	/** 하나라도 맞으면 묶음 가중치 전부. members = { 요인 이름, 요인 점수(맞으면 > 0), 켜짐 } */
+	/** 하나라도 맞으면 묶음 가중치 전부 (시나리오 배수가 걸린 요인이 맞으면 그중 큰 값). members = { 요인 이름, 요인 점수(맞으면 > 0), 켜짐, 배수 } */
 	private static ScoreItemTO anyGroup(String key, String label, int weight, Object[][] members) {
 		List<String> hits = new ArrayList<>();
 		boolean anyOn = false;
+		double best = 0;
 		for (Object[] m : members) {
 			anyOn |= (Boolean) m[2];
-			if ((Boolean) m[2] && (Integer) m[1] > 0) hits.add((String) m[0]);
+			if ((Boolean) m[2] && (Integer) m[1] > 0) {
+				hits.add((String) m[0]);
+				best = Math.max(best, weight * (Double) m[3]);
+			}
 		}
-		int points = hits.isEmpty() ? 0 : weight;
+		int points = (int) Math.round(best);
 		String desc = !anyOn ? "분석 조건에서 제외" : hits.isEmpty() ? "해당 없음" : String.join(" · ", hits);
 		return new ScoreItemTO(key, label, points, anyOn ? weight : 0, points > 0, desc);
 	}
 
-	/** 묶음 가중치 × (맞은 요인 수 ÷ 켜진 요인 수). "노후 · 2개 중 1개" */
+	/** 묶음 가중치 × (맞은 요인 수 ÷ 켜진 요인 수), 맞은 요인마다 시나리오 배수. "노후 · 2개 중 1개" */
 	private static ScoreItemTO ratioGroup(String key, String label, int weight, Object[][] members) {
 		List<String> hits = new ArrayList<>();
 		int on = 0;
+		for (Object[] m : members) if ((Boolean) m[2]) on++;
+		double sum = 0;
 		for (Object[] m : members) {
 			if (!(Boolean) m[2]) continue;
-			on++;
-			if ((Integer) m[1] > 0) hits.add((String) m[0]);
+			if ((Integer) m[1] > 0) {
+				hits.add((String) m[0]);
+				sum += weight * (Double) m[3] / on;
+			}
 		}
-		int points = on == 0 ? 0 : (int) Math.round(weight * (double) hits.size() / on);
+		int points = on == 0 ? 0 : (int) Math.round(sum);
 		String desc = on == 0 ? "분석 조건에서 제외"
 				: (hits.isEmpty() ? "해당 없음" : String.join(" · ", hits)) + " · " + on + "개 중 " + hits.size() + "개";
 		return new ScoreItemTO(key, label, points, on == 0 ? 0 : weight, points > 0, desc);

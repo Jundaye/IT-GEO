@@ -4,6 +4,7 @@
 <c:set var="pageTitle" value="현장 확인 리스트 편집"/>
 <c:set var="pageCss" value="pages"/>
 <c:set var="activeMenu" value="field"/>
+<c:set var="recentTitle" value="${empty field.title ? '새 현장확인 리스트' : field.title}"/>
 <c:set var="ctx" value="${pageContext.request.contextPath}"/>
 <!DOCTYPE html>
 <html lang="ko">
@@ -100,8 +101,8 @@
   };
 </script>
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>"></script>
-<script src="${ctx}/resources/js/common.js"></script>
-<script src="${ctx}/resources/js/field-map.js"></script>
-<script src="${ctx}/resources/js/field-edit.js"></script>
+<script src="${ctx}/resources/js/common.js?v=${assetVer}"></script>
+<script src="${ctx}/resources/js/field-map.js?v=${assetVer}"></script>
+<script src="${ctx}/resources/js/field-edit.js?v=${assetVer}"></script>
 </body>
 </html>

@@ -28,6 +28,11 @@ public class AnalysisCriteriaTO {
 	private int floodW = 25;          // 침수 위험 (침수 이력 · 저지대)
 	private int econW = 10;           // 경제 여건 (저가 주택)
 
+	// ---- 재해 시나리오 (피그마 02 상황 버튼 · 02-3) : 해당 요인 점수 × 1.5, 합계는 100점에서 자른다 (mapper-building scoreExpr) ----
+	//   RAIN 폭우 = 지하층 · 침수흔적 · 저지대 / HEAT 폭염 = 옥탑 · 고시원 · 노후 / COLD 한파 = 노후 · 저가 주택 · 고시원
+	public static final double SCENARIO_X = 1.5;
+	private String scenario = "";     // "" 평시(기본값) | RAIN | HEAT | COLD
+
 	private int checkedMonths = 3;    // 현장 확인됨 기간 (9단계) : 3 | 12 | 0 = 전체 | -1 = 끄기. 범례의 "현장 확인됨" 에서 고른다
 	private int scoreMin = 80;        // 이 점수 이상만 "위험" (결과 리스트 · 도넛 가운데 숫자 · 80점 이상만 보기)
 
@@ -87,6 +92,25 @@ public class AnalysisCriteriaTO {
 	public int getOffset() {
 		return (Math.max(page, 1) - 1) * size;
 	}
+
+	/** 모르는 값은 평시("") 로 (SQL 에는 아래 배수만 들어가지만 화면 · 보관함 링크에 그대로 다시 쓰이므로) */
+	public void setScenario(String scenario) {
+		this.scenario = "RAIN".equals(scenario) || "HEAT".equals(scenario) || "COLD".equals(scenario) ? scenario : "";
+	}
+
+	/** 요인 점수 배수 : 지금 시나리오가 그 요인을 키우면 1.5, 아니면 1 (mapper-building pt* 의 #{ugrndX} 등) */
+	private double x(String... scenarios) {
+		for (String s : scenarios) if (s.equals(scenario)) return SCENARIO_X;
+		return 1;
+	}
+	public double getUgrndX()   { return x("RAIN"); }
+	public double getFloodX()   { return x("RAIN"); }
+	public double getLowX()     { return x("RAIN"); }
+	public double getRooftopX() { return x("HEAT"); }
+	public double getGosiwonX() { return x("HEAT", "COLD"); }
+	public double getOldX()     { return x("HEAT", "COLD"); }
+	public double getCheapX()   { return x("COLD"); }
+	public double getViolX()    { return 1; }
 
 	/** 목록 page 가 1 미만이면 1 로 (15단계 D-14). Lombok 은 같은 이름의 setter 가 있으면 만들지 않는다 */
 	public void setPage(int page) {

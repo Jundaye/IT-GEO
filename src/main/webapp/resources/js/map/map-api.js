@@ -33,6 +33,9 @@ window.MapApi = (function () {
     /* 정보 확인하기 : 동·호수만 */
     resident: function (residentId) { return api('GET', 'api/map/resident.do', { residentId: residentId }); },
 
+    /* 상단 현황 패널 "지금 처리할 일" : {todo, due, reply} */
+    todo: function () { return api('GET', 'api/map/todo.do'); },
+
     /* 보관함 저장 */
     archiveAdd: function (bldId, sggCd, score, criteria) {
       return api('POST', 'api/archive/add.do', { bldId: bldId, sggCd: sggCd, score: score, criteria: JSON.stringify(criteria || {}) });

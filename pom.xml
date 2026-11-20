@@ -178,8 +178,14 @@
 	</dependency>
 	-->
 
+	<!-- 대시보드 월간 보고서 초안 (ReportService) : Claude API 공식 Java SDK -->
+    <dependency>
+      <groupId>com.anthropic</groupId>
+      <artifactId>anthropic-java</artifactId>
+      <version>3.3.0</version>
+    </dependency>
 		<!-- Source: https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-	<dependency>
+    <dependency>
 	    <groupId>org.projectlombok</groupId>
 	    <artifactId>lombok</artifactId>
 	    <version>1.18.48</version>

@@ -5,6 +5,7 @@
 <c:set var="pageTitle" value="현장 확인"/>
 <c:set var="pageCss" value="pages"/>
 <c:set var="activeMenu" value="field"/>
+<c:set var="recentTitle" value="${field.title}"/>
 <c:set var="ctx" value="${pageContext.request.contextPath}"/>
 <!DOCTYPE html>
 <html lang="ko">
@@ -89,8 +90,8 @@
   window.FD_ITEMS = [<c:forEach var="it" items="${field.items}" varStatus="s">{ title: '<c:out value="${it.title}"/>', lat: ${it.lat}, lng: ${it.lng}, order: ${it.visitOrder == null ? s.index + 1 : it.visitOrder}, checked: ${it.checked} }<c:if test="${!s.last}">,</c:if></c:forEach>];
 </script>
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>"></script>
-<script src="${ctx}/resources/js/common.js"></script>
-<script src="${ctx}/resources/js/field-map.js"></script>
-<script src="${ctx}/resources/js/field-detail.js"></script>
+<script src="${ctx}/resources/js/common.js?v=${assetVer}"></script>
+<script src="${ctx}/resources/js/field-map.js?v=${assetVer}"></script>
+<script src="${ctx}/resources/js/field-detail.js?v=${assetVer}"></script>
 </body>
 </html>

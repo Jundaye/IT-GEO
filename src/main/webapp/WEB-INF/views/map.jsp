@@ -13,6 +13,20 @@
 
   <%-- ================= 왼쪽 : 레이어 패널 (Figma 02) ================= --%>
   <aside class="layer-panel" id="panelLeft">
+    <%-- 상황 버튼 (피그마 02) : 기본값 / 폭우 / 폭염 / 한파. 누르면 그 상황의 기본 조건으로 되돌리고 아래 요인 목록을 잠근다 ([직접 조정 >] 으로 풀기).
+         재해 시나리오 = 해당 요인 점수 × 1.5, 100점에서 자름 (AnalysisCriteriaTO.scenario). [분석 실행] 을 눌러야 지도에 반영 --%>
+    <div class="scn-tabs" id="scnTabs" role="tablist" aria-label="재해 시나리오">
+      <button type="button" class="scn-tab on" data-scn="" role="tab" aria-selected="true"><i class="ico ico-sc-default" aria-hidden="true"></i>기본값</button>
+      <button type="button" class="scn-tab" data-scn="RAIN" role="tab" aria-selected="false" title="지하층 · 침수흔적 · 저지대 점수 1.5배"><i class="ico ico-sc-rain" aria-hidden="true"></i>폭우</button>
+      <button type="button" class="scn-tab" data-scn="HEAT" role="tab" aria-selected="false" title="옥탑 · 고시원 · 노후 점수 1.5배"><i class="ico ico-sc-heat" aria-hidden="true"></i>폭염</button>
+      <button type="button" class="scn-tab" data-scn="COLD" role="tab" aria-selected="false" title="노후 · 저가 주택 · 고시원 점수 1.5배"><i class="ico ico-sc-cold" aria-hidden="true"></i>한파</button>
+    </div>
+
+    <div class="layer-body">
+    <%-- 잠금 필터 (피그마 02 "잠금 필터") : 상황 버튼의 기본 조건일 때 요인 목록을 어둡게 덮는다. [직접 조정 >] 을 누르면 걷힌다 --%>
+    <div class="layer-lock" id="layerLock">
+      <button type="button" class="lock-unlock" id="btnUnlock">직접 조정 &gt;</button>
+    </div>
     <div class="layer-scroll">
       <%-- 요인은 위험 유형 4묶음 아래로 (5-1 "가중치·분석 실행·도넛"). 켜고 끄기만, 새 요인 추가 없음. 점수(가중치)는 [가중치 조정] 팝업에서만 보인다 (피그마 02) --%>
 
@@ -93,6 +107,7 @@
       </section>
 
     </div>
+    </div>
 
     <div class="layer-foot">
       <button type="button" class="btn btn-line" id="btnWeights">가중치 조정</button>
@@ -147,6 +162,37 @@
       </div>
     </div>
 
+    <%-- 재해 시나리오 적용 중 띠 (피그마 02-3) : [분석 실행]으로 확정된 시나리오가 있을 때만. 글자는 map-main.js --%>
+    <div class="scn-banner" id="scnBanner" role="status"></div>
+
+    <%-- 지도 모드 (피그마 02 "일반 · 위성 · 로드뷰") : map-main.js
+         위성 = 네이버 HYBRID(항공사진 + 지명 · 도로명), 로드뷰 = 거리뷰 되는 길을 파란 선으로 표시하고 지도를 클릭하면 그 자리 거리뷰 (#panoWrap) --%>
+    <div class="map-type" role="group" aria-label="지도 모드">
+      <button type="button" class="mt-btn on" data-mt="normal" aria-pressed="true"><i class="ico ico-mt-normal" aria-hidden="true"></i><span>일반</span></button>
+      <button type="button" class="mt-btn" data-mt="satellite" aria-pressed="false"><i class="ico ico-mt-satellite" aria-hidden="true"></i><span>위성</span></button>
+      <button type="button" class="mt-btn" data-mt="street" aria-pressed="false"><i class="ico ico-mt-street" aria-hidden="true"></i><span>로드뷰</span></button>
+    </div>
+
+    <%-- 로드뷰 창 : 지도 위에 띄운다 (지도 다크 필터를 받지 않게 #map 밖). 네이버 파노라마 = maps.js submodules=panorama --%>
+    <div class="pano-wrap" id="panoWrap" hidden>
+      <div class="pano-head"><b>로드뷰</b><span id="panoInfo"></span><button type="button" class="pano-x" id="panoClose" title="로드뷰 닫기" aria-label="로드뷰 닫기">×</button></div>
+      <div class="pano" id="pano"></div>
+    </div>
+
+    <%-- 상단 현황 패널 (피그마 02 "양쪽 패널 접힘 + 상단 현황 패널") : 왼쪽 레이어 패널 · 오른쪽 패널이 모두 닫혀 있을 때만 보인다 (map.css).
+         숫자 = api/map/todo.do (조사 대기 = 보관함 신규 · 기한 임박 = 조사 예정일 3일 안 미확인 · 결과 확인 필요 = 이관 회신 대기). 아래 손잡이로 접고 편다 --%>
+    <div class="todo-wrap" id="todoWrap">
+      <div class="todo-panel" id="todoPanel">
+        <b class="todo-title">지금 처리할 일</b>
+        <div class="todo-nums">
+          <div class="todo-item"><b id="tdTodo">-</b><span><img src="${pageContext.request.contextPath}/resources/img/icons/st-dot-green.svg" width="6" height="6" alt="">조사 대기</span></div>
+          <div class="todo-item"><b id="tdDue">-</b><span><img src="${pageContext.request.contextPath}/resources/img/icons/st-dot-orange.svg" width="6" height="6" alt="">기한 임박</span></div>
+          <div class="todo-item"><b id="tdReply">-</b><span><img src="${pageContext.request.contextPath}/resources/img/icons/st-dot-blue.svg" width="6" height="6" alt="">결과 확인 필요</span></div>
+        </div>
+      </div>
+      <button type="button" class="todo-fold" id="todoFold" aria-expanded="true" title="현황 패널 접기"><img src="${pageContext.request.contextPath}/resources/img/icons/chevron-up.svg" width="10" height="6" alt=""></button>
+    </div>
+
     <%-- 지도를 옮겨도 리스트는 그대로. 분석 뒤 옮기면 이 버튼이 뜨고, 누르면 그때만 화면 bbox 로 다시 받는다 (5-1) --%>
     <button type="button" class="btn-refetch" id="btnRefetch">⟳ 이 지역에서 재검색</button>
     <%-- 구청 계정이 관할 밖으로 나갔을 때 (11단계). 가림막 · 범위 제한은 map-main.js --%>
@@ -183,6 +229,27 @@
       <%@ include file="/WEB-INF/views/include/building-panel.jspf" %>
     </div>
 
+    <%-- 기준 가이드 (피그마 02-3) : 건물 상세 [이 기준은 왜?] 로 연다. 화면만 — 답변은 연동 예정 (map-panel.js) --%>
+    <div class="rp-view" id="guideView" style="display:none">
+      <div class="rp-head"><h2>기준 가이드</h2><button type="button" class="rp-close" id="guideClose" title="닫기">×</button></div>
+      <div class="gd-body" id="gdBody">
+        <p class="gd-note">미리 정리한 근거 문서(법령·연구·인터뷰) 안에서만 답해요. 데이터 검색이나 분석 실행은 하지 않아요.</p>
+        <div class="gd-msgs" id="gdMsgs"></div>
+      </div>
+      <div class="gd-faq">
+        <span>자주 묻는 기준</span>
+        <div class="gd-chips">
+          <button type="button" class="gd-chip">고시원 가산 근거</button>
+          <button type="button" class="gd-chip">에너지 급감 기준</button>
+          <button type="button" class="gd-chip">최저주거기준</button>
+        </div>
+      </div>
+      <form class="gd-input" id="gdForm" autocomplete="off">
+        <input class="field" id="gdQ" maxlength="200" placeholder="기준에 대해 물어보세요">
+        <button type="submit" class="btn btn-primary">보내기</button>
+      </form>
+    </div>
+
   </aside>
 </div>
 
@@ -196,16 +263,16 @@
   window.OPEN_BLD = '<c:out value="${openBldId}"/>';   // map.do?bldId= (05 지도에서 보기)
   window.OPEN_MSG = '<c:out value="${openMsg}"/>';     // 남의 구 건물 · 없는 건물이면 상세 대신 이 안내만 (15단계 A-2)
 </script>
-<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>"></script>
-<script src="${pageContext.request.contextPath}/resources/js/common.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-config.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/gu-boundary.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/dong-boundary.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-api.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-layer.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-marker.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-result.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-panel.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js"></script>
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>&submodules=panorama"></script>
+<script src="${pageContext.request.contextPath}/resources/js/common.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-config.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/gu-boundary.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/dong-boundary.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-api.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-layer.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-marker.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-result.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-panel.js?v=${assetVer}"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js?v=${assetVer}"></script>
 </body>
 </html>

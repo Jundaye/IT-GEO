@@ -52,7 +52,13 @@
         </c:if>
       </c:forEach>
     </select>
-    <select class="field" disabled><option>시나리오: 평시</option></select>
+    <%-- 재해 시나리오 : 고르면 "우선순위(추정)" 열 · 우선순위 순 정렬만 그 시나리오 점수로 다시 매긴다 (취약도 = 저장 당시 점수 그대로). mapper-archive archiveRows 의 pr --%>
+    <select class="field" name="scenario" id="selScenario" title="우선순위(추정)를 이 시나리오 점수로 다시 매깁니다">
+      <option value="" ${empty criteria.scenario ? 'selected' : ''}>시나리오: 평시</option>
+      <option value="RAIN" ${criteria.scenario == 'RAIN' ? 'selected' : ''}>시나리오: 폭우</option>
+      <option value="HEAT" ${criteria.scenario == 'HEAT' ? 'selected' : ''}>시나리오: 폭염</option>
+      <option value="COLD" ${criteria.scenario == 'COLD' ? 'selected' : ''}>시나리오: 한파</option>
+    </select>
     <button type="button" class="btn btn-line btn-sm ${criteria.fopen ? 'on' : ''}" id="btnFilter">상세 필터<c:if test="${criteria.filterCount > 0}"> <b class="fcnt">${criteria.filterCount}</b></c:if> ▾</button>
     <input type="hidden" name="fopen" id="fopen" value="${criteria.fopen}">
     <span class="spacer"></span>
@@ -112,7 +118,7 @@
           <input type="date" class="field" name="savedTo" value="<c:out value='${criteria.savedTo}'/>">
         </div></div>
       <div class="fd-foot">
-        <a class="btn btn-line btn-sm" href="${ctx}/archive.do?status=${st}&gu=${criteria.gu}&sort=${criteria.sort}">초기화</a>
+        <a class="btn btn-line btn-sm" href="${ctx}/archive.do?status=${st}&gu=${criteria.gu}&sort=${criteria.sort}&scenario=${criteria.scenario}">초기화</a>
         <button type="submit" class="btn btn-primary btn-sm">필터 적용</button>
       </div>
     </div>
@@ -190,7 +196,7 @@
 <form id="addItemsForm" method="post" action="${ctx}/fieldadditems.do" style="display:none"><input type="hidden" name="listId" id="addListId"><div id="addIds"></div></form>
 <form id="deleteForm" method="post" action="${ctx}/archivedelete.do" style="display:none"><div id="delIds"></div></form>
 
-<script src="${ctx}/resources/js/common.js"></script>
-<script src="${ctx}/resources/js/archive.js"></script>
+<script src="${ctx}/resources/js/common.js?v=${assetVer}"></script>
+<script src="${ctx}/resources/js/archive.js?v=${assetVer}"></script>
 </body>
 </html>

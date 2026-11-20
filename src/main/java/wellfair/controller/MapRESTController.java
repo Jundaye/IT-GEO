@@ -1,6 +1,7 @@
 package wellfair.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpSession;
 import wellfair.common.ForbiddenException;
+import wellfair.service.ArchiveService;
 import wellfair.service.MapService;
 import wellfair.service.ResidentService;
 import wellfair.to.AnalysisCriteriaTO;
@@ -48,6 +50,9 @@ public class MapRESTController {
 
 	@Autowired
 	ResidentService residentService;
+
+	@Autowired
+	ArchiveService archiveService;
 
 	// 구 단위 요약. 구청 계정은 소속 구만 (11단계 : 다른 두 구의 경계 · 숫자 원은 아예 안 보낸다)
 	@GetMapping(value = "api/map/gus.do", produces = "application/json;charset=UTF-8")
@@ -106,6 +111,13 @@ public class MapRESTController {
 		if (bldId == null) throw new IllegalArgumentException("없는 가구입니다.");
 		assertMyGu(member(session), guOfBuilding(bldId));
 		return residentService.getResidentLocation(residentId);
+	}
+
+	// 지도 상단 현황 패널 "지금 처리할 일" (피그마 02 양쪽 패널 접힘) : {todo, due, reply}. 구청 계정은 소속 구만
+	@GetMapping(value = "api/map/todo.do", produces = "application/json;charset=UTF-8")
+	public Map<String, Integer> todo(HttpSession session) {
+		MemberTO m = member(session);
+		return archiveService.getTodoSummary(m.getUserId(), m.isGuUser() ? m.getSggCd() : null);
 	}
 
 	private String guOfBuilding(String bldId) {

@@ -112,7 +112,7 @@ window.MapPanel = (function () {
   function show(bldId) {
     current = null;
     $('#panelRight').addClass('open');
-    $('#resultView').hide(); $('#detailView').show();
+    $('#resultView, #guideView').hide(); $('#detailView').show();
     $('#dTitle').text('불러오는 중…'); $('#dAddr').text(''); $('#dHistory').hide(); $('#dScoreItems, #dInfo, #dWelf').empty();
     MapApi.building($.extend({}, getCriteria(), { bldId: bldId })).done(function (d) {
       if (!d || !d.building) { Common.toast('건물 정보를 찾을 수 없습니다.'); return; }
@@ -165,7 +165,23 @@ window.MapPanel = (function () {
       }).always(function () { $b.prop('disabled', false); });
     });
 
-    $('#btnWhy').on('click', function () { Common.toast('기준 가이드(LLM)는 연동 예정입니다.'); });
+    /* 기준 가이드 (피그마 02-3) : [이 기준은 왜?] → 오른쪽 패널을 가이드로. [×] 는 건물 상세로 돌아간다.
+       화면만 : 질문을 보내면 질문 말풍선 + "연동 예정" 답만 붙인다 (근거 문서 기반 답변은 연동 예정) */
+    $('#btnWhy').on('click', function () {
+      $('#detailView, #resultView').hide(); $('#guideView').show();
+      $('#gdQ').trigger('focus');
+    });
+    $('#guideClose').on('click', function () { $('#guideView').hide(); $('#detailView').show(); });
+    function ask(q) {
+      q = $.trim(q || '');
+      if (!q) return;
+      $('#gdMsgs').append($('<div class="gd-q"></div>').text(q))
+        .append('<div class="gd-a soon">기준 가이드 답변은 연동 예정이에요. 연동되면 미리 정리한 근거 문서(법령·연구·인터뷰) 안에서 답해 드려요.</div>');
+      $('#gdBody').scrollTop($('#gdBody')[0].scrollHeight);
+    }
+    $('#gdForm').on('submit', function (e) { e.preventDefault(); ask($('#gdQ').val()); $('#gdQ').val(''); });
+    $('.gd-chip').on('click', function () { ask($(this).text()); });
+
     $('#detailBack').on('click', function () { $('#detailView').hide(); $('#resultView').show(); });
     $('#detailClose, #resultClose').on('click', function () { $('#panelRight').removeClass('open'); });   /* 오른쪽 패널도 지도 위에 덮으므로 resize 없음 */
   }

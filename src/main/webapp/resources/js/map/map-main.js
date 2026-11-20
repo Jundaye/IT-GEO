@@ -26,6 +26,7 @@ $(function () {
     bbox: null,              // [이 지역에서 재검색] 뒤의 리스트 범위 ("지도 화면 안"). 동을 다시 고르면 null
     quietUntil: 0,           // 프로그램이 지도를 옮기는 동안(flyTo · fitTo)은 [재검색] 버튼을 띄우지 않는다
     selectedId: null,
+    selected: null,
     riskOnly: C.RISK_ONLY,   // 기준점 이상 건물이 있는 묶음 · 기준점 이상 핀만 (지도 위 칩으로 끄고 켬)
     checkedMonths: C.CHECKED_MONTHS, // 현장 확인됨 기간 : 3 | 12 | 0 전체 | -1 끄기 (범례에서 고름)
     lastRaw: null,           // 마지막 응답 { mode, list } : 칩을 눌렀을 때 다시 요청하지 않고 다시 그린다
@@ -218,9 +219,9 @@ $(function () {
     lock.bbox = [minLng, minLat, maxLng, maxLat];
     var hole = g.ring.map(function (p) { return LL(p[1], p[0]); });
     /* 바깥 사각형(서울 서남부를 넉넉히) + 소속 구 ring 을 구멍으로. 지도 타일에 다크 필터(invert + hue-rotate)가 걸려 있어
-       오버레이도 같이 뒤집히므로, 화면에 #0b0d12 로 보이게 하려면 그 반전색(#f4f2ed)을 넣는다 */
+       오버레이도 같이 뒤집히므로, 화면에 #0b0d12 로 보이게 하려면 그 반전색(#f4f2ed)을 넣는다. 라이트 · 위성은 lockMaskColor() */
     var outer = [LL(37.2, 126.5), LL(37.2, 127.3), LL(37.8, 127.3), LL(37.8, 126.5), LL(37.2, 126.5)];
-    lock.mask = new naver.maps.Polygon({ map: map, paths: [outer, hole], fillColor: '#f4f2ed', fillOpacity: 0.6, strokeWeight: 0, strokeOpacity: 0, clickable: false, zIndex: 2 });
+    lock.mask = new naver.maps.Polygon({ map: map, paths: [outer, hole], fillColor: lockMaskColor(), fillOpacity: 0.6, strokeWeight: 0, strokeOpacity: 0, clickable: false, zIndex: 2 });
     lock.line = new naver.maps.Polyline({ map: map, path: hole, strokeColor: '#4a8fe0', strokeWeight: 2, strokeOpacity: 1, clickable: false, zIndex: 3 });
     /* 이동 범위 = 구 bbox + 사방 2km (위도 0.018°, 경도 0.0227°), 최소 줌 12 */
     var dLat = 0.018, dLng = 0.0227;
@@ -305,13 +306,37 @@ $(function () {
     naver.maps.Event.addListener(map, 'idle', function () { scheduleLoad(); onMoved(); });
   }
 
+  /* 재해 시나리오 적용 중 띠 (피그마 02-3). 확정된 조건(state.criteria)의 시나리오만 보인다 */
+  var SCENARIO_TEXT = {
+    RAIN: '☔ 폭우 시나리오: 지하층 · 침수 가중치 1.5배 적용 중',
+    HEAT: '☀ 폭염 시나리오: 옥탑 · 고시원 · 노후 가중치 1.5배 적용 중',
+    COLD: '❄ 한파 시나리오: 노후 · 저가 주택 · 고시원 가중치 1.5배 적용 중'
+  };
+  function renderBanner() {
+    var t = SCENARIO_TEXT[(state.criteria || {}).scenario];
+    $('#scnBanner').text(t || '').toggleClass('show', !!t);
+  }
+
+  /* 상단 현황 패널 (양쪽 패널이 닫혔을 때 보임, map.css) : "지금 처리할 일" 숫자. 시작 · 왼쪽 패널 여닫을 때 · 보관함 저장 뒤 다시 받는다 */
+  function loadTodo() {
+    MapApi.todo().done(function (t) {
+      $('#tdTodo').text(Common.num(t.todo)); $('#tdDue').text(Common.num(t.due)); $('#tdReply').text(Common.num(t.reply));
+    });
+  }
+  $('#todoFold').on('click', function () {
+    var folded = $('#todoWrap').toggleClass('folded').hasClass('folded');
+    $(this).attr({ 'aria-expanded': String(!folded), title: folded ? '현황 패널 펼치기' : '현황 패널 접기' });
+  });
+  $('#toggleLeft').on('click', loadTodo);
+
   /* "분석 실행" : 이때 조건을 확정 → 구 요약 · 도넛/핀 · 결과 리스트를 한 번에 다시. 이후 지도 이동 · 재검색 · 보관함 저장은 모두 이 조건 */
   function runAnalysis(c) {
     state.analyzed = true;
     state.criteria = c;
+    renderBanner();
     state.cellByLevel = {};
     $('#panelRight').addClass('open');
-    $('#detailView').hide(); $('#resultView').show();
+    $('#detailView, #guideView').hide(); $('#resultView').show();
     $('#btnRefetch').removeClass('show');
     loadGus();
     loadPoints();
@@ -323,6 +348,7 @@ $(function () {
   /* ---------- 선택 ---------- */
   function selectBuilding(b, fly) {
     state.selectedId = b.bldId;
+    state.selected = b;                 // 로드뷰 : 상세가 열린 건물이 있으면 그 자리에서 연다
     MapMarker.select(b.bldId);
     MapResult.highlight(b.bldId);
     MapPanel.show(b.bldId);
@@ -344,6 +370,87 @@ $(function () {
   MapPanel.init({ getCriteria: criteria, onArchived: setChips, onClose: resize });
 
   function resize() { if (live()) naver.maps.Event.trigger(map, 'resize'); }
+
+  /* ---------- 지도 모드 : 일반 · 위성 · 로드뷰 (피그마 02 오른쪽 위) ----------
+     위성 = HYBRID(항공사진 + 지명 · 도로명). 사진은 반전하면 안 되므로 #map.mt-photo 로 다크 필터를 끈다 (map.css)
+     로드뷰 = 일반 지도 + StreetLayer(거리뷰 되는 길 = 파란 선). 지도를 클릭하면 그 자리 거리뷰를 #panoWrap 에 띄운다.
+              건물 상세가 열려 있으면 그 건물 자리에서 바로 열고, 건물 쪽을 바라보게 돌린다 */
+  var mapType = 'normal', street = null, pano = null, panoPin = null, panoAim = null;
+  /* 관할 밖 가림막 색 : 다크 일반 지도는 반전 필터를 받으므로 반전색, 라이트는 흰 막, 위성은 어두운 막 */
+  function lockMaskColor() {
+    if (mapType === 'satellite') return '#0b0d12';
+    return Common.theme() === 'light' ? '#ffffff' : '#f4f2ed';
+  }
+  function repaintLock() { if (lock.mask) lock.mask.setOptions({ fillColor: lockMaskColor() }); }
+  $(document).on('themechange', repaintLock);
+
+  function setMapType(t) {
+    if (!live()) { Common.toast('지도를 불러오지 못해 지도 모드를 바꿀 수 없습니다.'); return; }
+    if (t === 'street' && !naver.maps.Panorama) { Common.toast('로드뷰를 불러오지 못했습니다.'); return; }
+    mapType = t;
+    $('.mt-btn').each(function () { var on = $(this).data('mt') === t; $(this).toggleClass('on', on).attr('aria-pressed', String(on)); });
+    map.setMapTypeId(t === 'satellite' ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
+    $map.toggleClass('mt-photo', t === 'satellite');
+    repaintLock();
+    if (t === 'street') {
+      if (!street) street = new naver.maps.StreetLayer();
+      street.setMap(map);
+      var b = state.selected;
+      if (b && $('#panelRight').hasClass('open') && $('#detailView').is(':visible')) openPano(LL(b.lat, b.lng), b);
+      else Common.toast('파란 선이 있는 길을 클릭하면 그 자리 로드뷰가 열립니다.');
+    } else {
+      if (street) street.setMap(null);
+      closePano();
+    }
+  }
+  $('.mt-btn').on('click', function () { var t = $(this).data('mt'); if (t !== mapType) setMapType(t); });
+
+  /* from → to 방위각 (북 = 0, 시계 방향) */
+  function bearing(from, to) {
+    var r = Math.PI / 180, la1 = from.lat() * r, la2 = to.lat() * r, dl = (to.lng() - from.lng()) * r;
+    var y = Math.sin(dl) * Math.cos(la2), x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dl);
+    return (Math.atan2(y, x) / r + 360) % 360;
+  }
+  function openPano(pos, b) {
+    panoAim = b ? pos : null;
+    $('#panoInfo').text(b ? $('#dTitle').text() : '');   // 건물에서 열 때만 : 상세 패널 제목 (리스트에서 고른 건물은 좌표만 넘어온다)
+    $('#panoWrap').prop('hidden', false);
+    if (!pano) {
+      pano = new naver.maps.Panorama('pano', { position: pos, pov: { pan: 0, tilt: 0, fov: 100 }, aroundControl: true, zoomControl: true, zoomControlOptions: { position: naver.maps.Position.TOP_RIGHT } });
+      /* 근처에 거리뷰가 없으면 ERROR */
+      naver.maps.Event.addListener(pano, 'pano_status', function (status) {
+        if (status !== 'OK') { closePano(); Common.toast('이 자리 근처에는 로드뷰가 없습니다. 파란 선이 있는 길을 클릭해 보세요.'); }
+      });
+      /* 거리뷰 지점이 바뀔 때마다 지도에 현재 위치 점. 처음 한 번은 건물 쪽을 바라보게 */
+      naver.maps.Event.addListener(pano, 'pano_changed', function () {
+        var at = pano.getPosition();
+        if (!panoPin) panoPin = new naver.maps.Marker({ map: map, position: at, zIndex: 300, clickable: false, icon: { content: '<div class="mk-inv pano-pin"></div>', anchor: new naver.maps.Point(9, 9) } });
+        else { panoPin.setPosition(at); panoPin.setMap(map); }
+        if (panoAim) { pano.setPov({ pan: bearing(at, panoAim), tilt: 0, fov: 100 }); panoAim = null; }
+      });
+    } else {
+      pano.setPosition(pos);
+      panoResize();
+    }
+  }
+  /* 파노라마는 #pano 에 고정 폭을 인라인으로 박으므로, 바깥 창(#panoWrap) 크기 - 머리줄로 다시 잡는다 */
+  function panoResize() {
+    var wrap = $('#panoWrap')[0];
+    if (!pano || wrap.hidden || !wrap.clientWidth) return;
+    pano.setSize(new naver.maps.Size(wrap.clientWidth, wrap.clientHeight - $('#panoWrap .pano-head').outerHeight()));
+  }
+  function closePano() {
+    $('#panoWrap').prop('hidden', true);
+    if (panoPin) panoPin.setMap(null);
+  }
+  $('#panoClose').on('click', closePano);
+  /* 왼쪽 · 오른쪽 패널을 접고 펴면 로드뷰 창 크기가 바뀐다 → 거리뷰도 다시 맞춘다 */
+  if (window.ResizeObserver) new ResizeObserver(panoResize).observe($('#panoWrap')[0]);
+  if (live()) naver.maps.Event.addListener(map, 'click', function (e) {
+    if (mapType !== 'street') return;
+    if (e.domEvent && $(e.domEvent.target).closest('.mk-inv').length) return;   // 마커 · 묶음 클릭은 원래 동작만
+    openPano(e.coord, null);
+  });
 
   /* ---------- 상단 : 구 · 동(법정동 → 행정동 2단계) · 검색 · 칩 ---------- */
   var esc = Common.esc;
@@ -498,7 +605,7 @@ $(function () {
     if (state.q) { state.q = ''; if (state.analyzed) MapResult.load(true); }
   });
 
-  function setChips() { /* 상단 칩은 없앴다 (대시보드로) */ }
+  function setChips() { loadTodo(); /* 상단 칩은 없앴다 (대시보드로). 보관함에 담았으면 "조사 대기" 숫자가 바뀐다 */ }
 
   /* 확대 · 축소 */
   $('#zoomIn').on('click', function () { if (live()) map.setZoom(Math.min(C.ZOOM.MAX, map.getZoom() + 1), true); });
@@ -510,6 +617,7 @@ $(function () {
   renderLegend(modeOf(zoomNow()));
   loadGus();
   loadChecked();
+  loadTodo();
   /* 05 [지도에서 보기] (map.do?bldId=) : 그 건물로 가서 상세 패널을 연다. 구청 계정이 남의 구 건물을 열려 하면 서버가 bldId 를 비우고 안내만 (15단계 A-2) */
   if (window.OPEN_MSG) Common.toast(window.OPEN_MSG);
   if (window.OPEN_BLD) {
