@@ -70,7 +70,7 @@
 	</sql>
 
 	<!-- 건물별 집계 (지도·리스트·상세에 노출되는 건 이것뿐) -->
-	<select id="getResidentCount" parameterType="String" resultType="wellfair.to.ResidentCountTO">
+	<select id="getResidentCount" parameterType="String" resultType="itgeo.to.ResidentCountTO">
 		SELECT COUNT(*)                                            hh_cnt
 		     , IFNULL(SUM(y.hh_mbr_cnt), 0)                        mbr_cnt
 		     , IFNULL(SUM(y.risk_grade = '고위험고립'), 0)         high_risk_hh
@@ -90,7 +90,7 @@
 	</select>
 
 	<!-- 3D 층 색칠 : 거주 층마다 가구 수 · 취약 가구 수만 (이름 · 나이 없음). 취약 기준은 getResidentCount 의 vuln_hh 와 같다 -->
-	<select id="getFloorStat" parameterType="String" resultType="wellfair.to.FloorStatTO">
+	<select id="getFloorStat" parameterType="String" resultType="itgeo.to.FloorStatTO">
 		SELECT y.res_flr
 		     , COUNT(*)                                                                    hh_cnt
 		     , IFNULL(SUM(y.priority >= <include refid="mapper-resident.vulnMin"/>), 0)    vuln_hh_cnt
@@ -101,7 +101,7 @@
 
 	<!-- 거주 가구 탭 : 세대 카드 (가림 처리는 ResidentService).
 	     순서 = 가장 취약한 순 (12단계) : 가구 가점 → 고립 등급(고위험고립 → 사회적고립) → 가구원 최고 나이 → 1인 가구 먼저 → id. JS 는 다시 정렬하지 않는다 -->
-	<select id="getResidentList" parameterType="String" resultType="wellfair.to.ResidentTO">
+	<select id="getResidentList" parameterType="String" resultType="itgeo.to.ResidentTO">
 		SELECT y.*
 		  FROM (<include refid="mapper-resident.householdSelect"/>) y
 		 ORDER BY y.priority DESC
@@ -117,7 +117,7 @@
 	</select>
 
 	<!-- 정보 확인하기 : 동·호수만 -->
-	<select id="getResident" parameterType="long" resultType="wellfair.to.ResidentTO">
+	<select id="getResident" parameterType="long" resultType="itgeo.to.ResidentTO">
 		SELECT r.hh_id resident_id, r.res_flr, r.dong_nm, r.ho_nm
 		  FROM residency r
 		 WHERE r.hh_id = #{residentId}

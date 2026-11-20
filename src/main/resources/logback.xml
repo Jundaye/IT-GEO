@@ -25,7 +25,7 @@
     <logger name="mapper-field" level="trace" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
-    <logger name="wellfair" level="debug" additivity="false">
+    <logger name="itgeo" level="debug" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
     <logger name="org.springframework.web" level="info" additivity="false">

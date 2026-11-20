@@ -12,10 +12,10 @@
 	<!-- app.properties (네이버 지도 Client ID 등). Java 에서 @Value("${app.naver.client-id}") 로 읽음 -->
 	<context:property-placeholder location="classpath:app.properties" file-encoding="UTF-8"/>
 
-	<!-- DB 이름(wellfair)·비밀번호는 로컬 MySQL 에 맞게 수정 -->
+	<!-- DB 이름(itgeo)·비밀번호는 로컬 MySQL 에 맞게 수정 -->
 	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource">
 	 	<property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
-	 	<property name="url" value="jdbc:mysql://localhost:3306/wellfair?serverTimezone=Asia/Seoul&amp;characterEncoding=UTF-8"/>
+	 	<property name="url" value="jdbc:mysql://localhost:3306/itgeo?serverTimezone=Asia/Seoul&amp;characterEncoding=UTF-8"/>
 	 	<property name="username" value="root"/>
 	 	<property name="password" value="rootroot"/>
 	 </bean>

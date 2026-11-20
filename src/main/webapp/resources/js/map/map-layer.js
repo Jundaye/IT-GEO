@@ -203,8 +203,8 @@ window.MapLayer = (function () {
       if (onRun) onRun(getCriteria());
     });
 
-    /* 패널 폭 : 오른쪽 끝 손잡이를 끌면 260~480px (기본 300), wf.lpW 에 기억. --lp-w 를 바꾸면 --lp-right · 접기 버튼 · 가중치 팝업 · 지도 위 요소가 같이 움직인다 */
-    Common.resizer({ handle: '#lpGrip', cssVar: '--lp-w', key: 'wf.lpW', min: 260, max: 480, def: 300, sign: 1 });
+    /* 패널 폭 : 오른쪽 끝 손잡이를 끌면 260~480px (기본 300), itgeo.lpW 에 기억. --lp-w 를 바꾸면 --lp-right · 접기 버튼 · 가중치 팝업 · 지도 위 요소가 같이 움직인다 */
+    Common.resizer({ handle: '#lpGrip', cssVar: '--lp-w', key: 'itgeo.lpW', min: 260, max: 480, def: 300, sign: 1 });
 
     /* 패널 여닫기 (처음에는 닫힘 : map.jsp 가 left-closed 를 붙여 렌더링) */
     $('#toggleLeft').on('click', function () {

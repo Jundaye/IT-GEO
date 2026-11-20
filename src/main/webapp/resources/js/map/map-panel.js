@@ -208,8 +208,8 @@ window.MapPanel = (function () {
       }).always(function () { $b.prop('disabled', false); });
     });
 
-    /* 오른쪽 패널 폭 : 왼쪽 끝 손잡이를 끌면 360~640px (기본 400), wf.rpW 에 기억 */
-    Common.resizer({ handle: '#rpGrip', cssVar: '--rp-w', key: 'wf.rpW', min: 360, max: 640, def: 400, sign: -1 });
+    /* 오른쪽 패널 폭 : 왼쪽 끝 손잡이를 끌면 360~640px (기본 400), itgeo.rpW 에 기억 */
+    Common.resizer({ handle: '#rpGrip', cssVar: '--rp-w', key: 'itgeo.rpW', min: 360, max: 640, def: 400, sign: -1 });
 
     /* 3D 보기 (#btn3d) : 클릭 · 로딩 표시는 map-3d.js (Bld3D) 가 맡는다. 목록으로 돌아가거나 패널을 닫으면 3D 도 닫는다 */
     $('#dHistory').on('click', function (e) { if ($(this).hasClass('disabled')) e.preventDefault(); });

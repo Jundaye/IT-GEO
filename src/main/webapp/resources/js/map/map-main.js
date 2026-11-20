@@ -410,7 +410,7 @@ $(function () {
                       눌림 표시는 .map-layout 의 left-closed 유무로 CSS 가 그리므로 여닫기 탭으로 여닫아도 같이 바뀐다
        왼쪽 패널에서 체크 · 기준값 · 가중치를 직접 바꾸면 : 선택은 그대로 두고 칩 글자가 "폭우 · 수정됨" (MapLayer.init 의 onChange).
                       같은 · 다른 시나리오를 다시 누르면 프리셋 값으로 돌아가고 "수정됨" 이 사라진다. 고친 값으로 분석하려면 패널의 [분석 실행]
-     접힘(wf.scenFold) : 선택한 시나리오 하나 ┃ 가중치 보기 | 펼치기. 시나리오를 골라도 자동으로 접지 않는다 */
+     접힘(itgeo.scenFold) : 선택한 시나리오 하나 ┃ 가중치 보기 | 펼치기. 시나리오를 골라도 자동으로 접지 않는다 */
   var scen = 'base', scenMod = false;
   var SCEN = C.SCENARIOS || [];
   function scenName(k) {
@@ -430,7 +430,7 @@ $(function () {
   function setFold(f) {
     $('#scenBar').toggleClass('folded', f);
     $('#scenFold').attr('aria-expanded', String(!f));
-    try { localStorage.setItem('wf.scenFold', f ? '1' : '0'); } catch (e) {}
+    try { localStorage.setItem('itgeo.scenFold', f ? '1' : '0'); } catch (e) {}
     fitTop();
   }
   $('#scenList').html(SCEN.map(function (v) {
@@ -680,7 +680,7 @@ $(function () {
     if (lock.mask) lock.mask.setOptions({ fillColor: maskColor() });
     loadGus();                                        // 구 색칠 (라이트는 한 단계 진하게)
   });
-  try { if (localStorage.getItem('wf.mapType') === 'sat') mapType = 'sat'; } catch (e) {}
+  try { if (localStorage.getItem('itgeo.mapType') === 'sat') mapType = 'sat'; } catch (e) {}
   function applyMapType() {
     var sat = mapType === 'sat';
     if (live()) map.setMapTypeId(sat ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
@@ -695,7 +695,7 @@ $(function () {
   }
   $('#mapType').on('click', 'button[data-type="normal"], button[data-type="sat"]', function () {
     mapType = $(this).attr('data-type');
-    try { localStorage.setItem('wf.mapType', mapType); } catch (e) {}
+    try { localStorage.setItem('itgeo.mapType', mapType); } catch (e) {}
     applyMapType();
   });
   applyMapType();

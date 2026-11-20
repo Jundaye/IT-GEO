@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>WellFAIR 건물 3D</title>
+<title>ITGEO 건물 3D</title>
 <!--
   map.jsp 건물 상세 패널 왼쪽 "건물 3D 입체보기" 상자 안에 iframe 으로 들어가는 페이지 (map-3d.js 가 띄운다)
   - 브이월드 WebGL 3D 3.0 (Cesium). 로더가 document.write 를 쓰므로 메인 화면과 분리하려고 iframe 으로 뺐다
@@ -80,7 +80,7 @@
     setGround();
     T.ready = ms();
     console.log('[bld3d] 시간 · 브이월드 스크립트 받기 ' + T.script + 'ms · 3D 엔진 준비 완료 ' + T.ready + 'ms (iframe 연 뒤부터)');
-    ds = new Cesium.CustomDataSource('wellfair');
+    ds = new Cesium.CustomDataSource('itgeo');
     viewer.dataSources.add(ds);
     viewer.scene.globe.depthTestAgainstTerrain = false;   // 땅속(지하층) 상자도 보이게
     /* 바뀐 게 있을 때만 그린다 (가만히 있으면 GPU 를 거의 안 씀) */

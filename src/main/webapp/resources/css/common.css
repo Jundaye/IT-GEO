@@ -1,4 +1,4 @@
-/* WellFAIR 공통 (다크) — Figma "WellFAIR (다크)" 기준
+/* ITGEO 공통 (다크) — Figma "ITGEO (다크)" 기준
    화면별 스타일은 login.css / map.css 등 별도 파일
    2026-11-08 설계 화면 값으로 맞춤 (색·모서리·글꼴·체크박스·슬라이더·로고) */
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap");
@@ -36,7 +36,7 @@
   --font: "Noto Sans KR", "Pretendard", -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
-/* 라이트 (2차 A, 시안 1-E : 밝은 웜 바탕 + 남색 포인트). <html data-theme="light"> 일 때 라이트 값만 덮어쓴다. 전환 = 헤더 #btnTheme (common.js), 저장 wf.theme */
+/* 라이트 (2차 A, 시안 1-E : 밝은 웜 바탕 + 남색 포인트). <html data-theme="light"> 일 때 라이트 값만 덮어쓴다. 전환 = 헤더 #btnTheme (common.js), 저장 itgeo.theme */
 :root[data-theme="light"] {
   --bg:        #fafaf8;   /* 페이지 바탕 (아주 옅은 웜 오프화이트) */
   --bg-panel:  #ffffff;   /* 패널·헤더·카드 */

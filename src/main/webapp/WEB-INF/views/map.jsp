@@ -9,7 +9,7 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 
-<%-- 2차(11-17) : 처음 들어오면 좌 · 우 패널 모두 닫힘. 왼쪽은 JS 로 닫으면 열렸다 닫히는 게 보여서 여기서 바로 left-closed. 열림 상태는 저장하지 않는다 (폭만 wf.lpW / wf.rpW) --%>
+<%-- 2차(11-17) : 처음 들어오면 좌 · 우 패널 모두 닫힘. 왼쪽은 JS 로 닫으면 열렸다 닫히는 게 보여서 여기서 바로 left-closed. 열림 상태는 저장하지 않는다 (폭만 itgeo.lpW / itgeo.rpW) --%>
 <div class="map-layout left-closed">
 
   <%-- ================= 왼쪽 : 레이어 패널 (Figma 02) ================= --%>
@@ -115,14 +115,14 @@
     <div id="map"></div>
 
     <%-- 분석 기준 줄 (2차 11-17 G) : [기본] [폭우] [폭염] [한파] ┃ [가중치 보기] | [접기]. 버튼은 MAP_CONFIG.SCENARIOS 를 보고 map-main.js 가 그린다.
-         접힘 상태는 wf.scenFold 에 기억. 깜빡이지 않게 처음부터 접힌 모양으로 그리도록 바로 아래 스크립트가 클래스를 붙인다 --%>
+         접힘 상태는 itgeo.scenFold 에 기억. 깜빡이지 않게 처음부터 접힌 모양으로 그리도록 바로 아래 스크립트가 클래스를 붙인다 --%>
     <div class="scen-bar" id="scenBar">
       <div class="scen-list" id="scenList"></div>
       <button type="button" class="scen-fold" id="scenFold" title="분석 기준 접기 · 펼치기" aria-expanded="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     </div>
     <%-- 분석 중 알약 (2차 R) : 결과를 새로 받는 동안만. 지도 조작은 막지 않는다 --%>
     <div class="an-pill" id="anPill"><i class="b3-spin"></i>분석 중…</div>
-    <script>try { if (localStorage.getItem('wf.scenFold') === '1') document.getElementById('scenBar').classList.add('folded'); } catch (e) {}</script>
+    <script>try { if (localStorage.getItem('itgeo.scenFold') === '1') document.getElementById('scenBar').classList.add('folded'); } catch (e) {}</script>
 
     <%-- 오른쪽 위 (2차 11-17 H) : [전체 구] [전체 동] [검색] [지도 유형]. 오른쪽 패널 왼쪽 끝에 붙어 같이 움직인다 --%>
     <%-- 구 선택 : 구청 계정(loginMember.sggCd 있음)은 소속 구로 잠금, 서울시청은 자유 (CLAUDE.md 5-1 계정 2종류) --%>
