@@ -38,28 +38,58 @@
 .wc-calendar .fc-event .fc-event-title, .wc-calendar .fc-event .fc-event-main { color: var(--text) !important; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .wc-calendar .fc-daygrid-more-link { font-size: 11px; color: var(--text-2); margin-left: 8px; }
 
-/* 오른쪽 패널 */
-.wc-side { position: sticky; top: 16px; background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+/* 일정 막대 오른쪽 × (pages_calendar.css .fc-x 모양 그대로, 막대 안쪽 여백만 넓힘) */
+.wc-calendar .fc-event.fc-daygrid-event { position: relative; padding-right: 20px; }
+.wc-calendar .fc-x { color: var(--text-2); }
+.wc-calendar .fc-x:hover { color: var(--danger, #e5484d); }
+
+/* 오른쪽 : 위 = 고른 날짜, 아래 = 내 현장 확인 리스트 (리스트가 늘면 아래로 길어지므로 sticky 는 쓰지 않는다) */
+.wc-side-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wc-side { background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .wc-side-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line-soft); }
 .wc-side-head h3 { margin: 0; font-size: 16px; }
-.wc-side-head small { display: block; margin-top: 3px; font-size: 12px; color: var(--text-2); }
-.wc-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
-.wc-row:hover, .wc-row.on { background: var(--bg-card); }
-.wc-row .dot { width: 7px; height: 7px; border-radius: 50%; }
+.wc-side-head small { display: block; margin-top: 3px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.wc-all-cnt { margin-left: 4px; font-size: 13px; color: var(--primary); }
+
+/* 리스트 카드 : 머리 줄 + 접히는 건물 목록 */
+.wc-card { border-bottom: 1px solid var(--line-soft); }
+.wc-card:last-child { border-bottom: 0; }
+/* flex 로 줄을 세운다 (칸 수를 정하는 grid 는 calendar.jsp 와 css 버전이 어긋나면 글자가 세로로 깨져서). 제목(.tx)만 남는 폭을 다 쓴다 */
+.wc-row { display: flex; align-items: center; gap: 10px; padding: 11px 16px 11px 12px; cursor: pointer; }
+.wc-row:hover, .wc-card.open .wc-row { background: var(--bg-card); }
+.wc-side .wc-row { cursor: grab; }                      /* 위 · 아래 리스트 모두 달력으로 끌 수 있다 */
+.wc-row.fc-event-dragging { cursor: grabbing; }
+.wc-row .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+/* ||| 손잡이 : 세로 줄 3개. 이 줄을 잡고(또는 줄 어디든) 끌어서 달력에 놓는다 */
+.wc-grip { flex: none; width: 12px; height: 18px; cursor: grab; opacity: .55;
+  background: linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px, currentColor 5px 7px, transparent 7px 10px, currentColor 10px 12px) center / 12px 16px no-repeat;
+  color: var(--text-2); }
+.wc-row:hover .wc-grip { opacity: 1; color: var(--primary); }
+.wc-row .tx { flex: 1 1 auto; min-width: 0; }
 .wc-row .tx b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wc-row .tx small { font-size: 12px; color: var(--text-2); }
-.wc-row .acts { display: none; gap: 6px; }
-.wc-row.on .acts, .wc-row:hover .acts { display: flex; }
-.wc-row.on .st-badge, .wc-row:hover .st-badge { display: none; }
-.wc-row .wc-del { color: var(--danger, #f05252); }
+.wc-row .rt { flex: none; display: flex; align-items: center; gap: 6px; }
+.wc-row .acts { display: flex; gap: 6px; }                /* 수정 · 빼기는 늘 보인다 (마우스 올림과 상관없이) */
+.wc-row .wc-del { color: var(--danger, #e5484d); }
 .st-badge { font-size: 11px; padding: 3px 7px; border-radius: 3px; color: var(--st); background: color-mix(in srgb, var(--st) 16%, transparent); white-space: nowrap; }
-.wc-bld { padding: 12px 16px 6px; }
-.wc-bld .cap { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
-.wc-b { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+
+/* 펼침 화살표 (현장 확인 리스트 카드와 같은 CSS 화살표) */
+.wc-caret { position: relative; flex: none; width: 20px; height: 20px; padding: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; }
+.wc-caret::before { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -5px 0 0 -5px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.wc-card.open .wc-caret { color: var(--primary); }
+.wc-card.open .wc-caret::before { transform: translateY(2px) rotate(-135deg); }
+
+/* 건물 목록 : 접혀 있다가 카드를 누르면 펼침 */
+.wc-bld { display: none; padding: 4px 16px 6px 51px; border-top: 1px solid var(--line-soft); }
+.wc-card.open .wc-bld { display: block; }
+.wc-b { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
 .wc-b:last-child { border-bottom: 0; }
-.wc-b .tx b { display: block; font-size: 14px; font-weight: 600; }
+.wc-b .tx { min-width: 0; }
+.wc-b .tx b { display: block; font-size: 13.5px; font-weight: 600; }
 .wc-b .tx small { font-size: 12px; color: var(--text-2); }
 .wc-b .sc { text-align: right; flex: 0 0 auto; }
-.wc-b .sc b { display: block; font-size: 17px; font-weight: 700; color: #f05252; }
+.wc-b .sc b { display: block; font-size: 16px; font-weight: 700; color: #f05252; }
 .wc-b .sc small { font-size: 11px; color: var(--text-3, #777); }
 .wc-empty { padding: 16px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+ 

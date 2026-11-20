@@ -1,0 +1,74 @@
+/* ===== fieldlist.css : 현장 확인 리스트 (fieldlist.do) 전용. 위치 : resources/css/fieldlist.css
+   예전 현장 확인 상세(fielddetail)를 합친 화면 : 왼쪽 리스트 카드 | 오른쪽 큰 지도 + 경로 · 소요시간 카드.
+   지도 · 경로 카드 모양(.fd-map .route-card .route-modes .route-stats .num-pin .start-pin)은 pages.css 것을 그대로 쓴다.
+   fieldlist.jsp 가 ?v= 를 붙여 불러오므로 이 파일을 고치면 jsp 의 v 값도 바꾼다 ===== */
+
+/* 상태 색 : 조사 전 초록 · 조사 중 주황 · 확인 완료 파랑 (업무 캘린더와 같은 색) */
+.fx-split .st-todo  { --st: #3fb950; }
+.fx-split .st-doing { --st: #f0a63a; }
+.fx-split .st-done  { --st: #4a8fe0; }
+
+/* 본문 : 리스트 | 지도 */
+.fx-split { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .fx-split { grid-template-columns: 1fr; } }
+
+/* ---------- 왼쪽 : 리스트 ---------- */
+.fx-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.fx-box { background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.fx-box-head { padding: 16px 18px 13px; border-bottom: 1px solid var(--line-soft); }
+.fx-box-head h3 { margin: 0; font-size: 16px; }
+.fx-box-head .fx-cnt { margin-left: 4px; font-size: 14px; color: var(--primary); }
+.fx-box-head small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+.fx-card { border-bottom: 1px solid var(--line-soft); }
+.fx-card:last-child { border-bottom: 0; }
+
+/* 카드 머리 : 점 · 이름/건물 수 · 상태 · ⌄  (flex 라 칸이 하나 빠져도 줄이 깨지지 않는다) */
+.fx-row { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; }
+.fx-row:hover, .fx-card.open .fx-row { background: var(--bg-card); }
+.fx-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--st); }
+.fx-row .tx { flex: 1 1 auto; min-width: 0; }
+.fx-row .tx b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-row .tx small { display: block; margin-top: 2px; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-badge { flex: none; font-size: 11px; padding: 3px 8px; border-radius: 3px; color: var(--st); background: color-mix(in srgb, var(--st) 16%, transparent); white-space: nowrap; }
+
+/* 펼침 화살표 ⌄ / ^ */
+.fx-caret { position: relative; flex: none; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; }
+.fx-caret::before { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -5px 0 0 -5px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.fx-card.open .fx-caret { color: var(--primary); }
+.fx-card.open .fx-caret::before { transform: translateY(2px) rotate(-135deg); }
+
+/* 펼친 건물 목록 */
+.fx-body { display: none; padding: 6px 16px 12px 18px; border-top: 1px solid var(--line-soft); }
+.fx-card.open .fx-body { display: block; }
+.fx-cap { font-size: 12px; color: var(--text-2); margin: 6px 0 2px; }
+.fx-item { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.fx-item .num { flex: none; }
+.fx-item .ti { flex: 1 1 auto; min-width: 0; }
+.fx-item .ti a { display: block; font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-item .ti a:hover { color: var(--primary); text-decoration: underline; }
+.fx-item .ti .addr, .fx-item .ti .leg { display: block; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-item .ti .leg { color: var(--text-3, #888); }
+.fx-item .sc { flex: none; text-align: right; }
+.fx-item .sc b { display: block; font-size: 17px; font-weight: 700; color: #f05252; line-height: 1.1; }
+.fx-item .sc small { font-size: 11px; color: var(--text-3, #888); }
+.fx-item .ck { flex: none; min-width: 72px; text-align: right; }
+.fx-item .ck form { margin: 0; }
+.fx-foot { display: flex; justify-content: flex-end; gap: 6px; padding-top: 12px; }
+.fx-foot .fx-del:not([disabled]) { color: var(--danger, #e5484d); }
+.fx-foot .fx-del[disabled] { opacity: .45; cursor: not-allowed; }
+.fx-empty { padding: 16px 18px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+
+/* 새 리스트 + (점선 상자) */
+.fx-add { display: grid; place-items: center; height: 76px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--text-2); text-decoration: none; }
+.fx-add span { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; font-size: 20px; background: var(--bg-panel); }
+.fx-add:hover { border-color: var(--primary); color: var(--primary); }
+.fx-add:hover span { border-color: var(--primary); }
+
+/* ---------- 오른쪽 : 지도 (스크롤해도 따라온다) ---------- */
+.fx-map { position: sticky; top: 16px; height: calc(100vh - 140px); min-height: 560px; margin-bottom: 0; }
+.fx-map .route-card { top: 16px; right: 16px; }
+.fx-map .map-ctrl { right: 16px; bottom: 16px; }
+.fx-map-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 11; padding: 12px 18px; font-size: 13px;
+  color: var(--text-2); background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); }

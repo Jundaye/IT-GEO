@@ -2,7 +2,6 @@
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <c:set var="pageTitle" value="업무 캘린더"/>
 <c:set var="pageCss" value="pages"/>
-<c:set var="pageCss2" value="workcal"/>
 <c:set var="activeMenu" value="calendar"/>
 <c:set var="ctx" value="${pageContext.request.contextPath}"/>
 <!DOCTYPE html>
@@ -11,8 +10,10 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 
-<%-- 달력 공용 스타일 (현장 확인 리스트 달력과 같은 파일). 이 페이지 전용 workcal.css 는 위 pageCss2 로 head 에서 불러옴 --%>
+<%-- 달력 공용 스타일 (현장 확인 리스트 달력과 같은 파일) + 이 페이지 전용 workcal.css.
+     workcal.css 는 ?v= 를 붙여 직접 불러온다 : 브라우저에 남은 옛 파일(마우스를 올리면 수정 · 빼기가 나왔다 들어가던 것)을 쓰지 않게. 파일을 고치면 v 값도 바꾼다 --%>
 <link rel="stylesheet" href="${ctx}/resources/css/pages_calendar.css">
+<link rel="stylesheet" href="${ctx}/resources/css/workcal.css?v=20261120d">
 
 <div class="page">
   <%-- 제목 줄 : 업무 캘린더 · ‹ 2026년 11월 › · 오늘 ········ 범례 · 이번 달 리스트 n개 --%>
@@ -31,15 +32,25 @@
   </div>
 
   <div class="wc-grid">
-    <%-- 왼쪽 : 한 달 달력 (현장 확인 리스트 화면에서 날짜에 넣은 일정이 그대로 보인다) --%>
+    <%-- 왼쪽 : 한 달 달력. 오른쪽 "내 현장 확인 리스트" 를 끌어다 날짜에 놓으면 일정으로 들어가고, 일정 막대의 × 로 뺀다 --%>
     <div id="wcCalendar" class="fl-calendar wc-calendar"></div>
 
-    <%-- 오른쪽 : 고른 날짜의 방문 리스트 → 리스트를 고르면 그 리스트의 건물 --%>
-    <aside class="wc-side">
-      <div class="wc-side-head"><h3 id="wcDay"></h3><small id="wcDaySub"></small></div>
-      <div id="wcLists"></div>
-      <div class="wc-bld" id="wcBld"></div>
-    </aside>
+    <div class="wc-side-col" id="wcSideCol">
+      <%-- 오른쪽 위 : 고른 날짜의 방문 리스트. 리스트를 누르면 그 안의 건물이 펼쳐진다 --%>
+      <aside class="wc-side">
+        <div class="wc-side-head"><h3 id="wcDay"></h3><small id="wcDaySub"></small></div>
+        <div id="wcLists"></div>
+      </aside>
+
+      <%-- 오른쪽 아래 : 내 현장 확인 리스트 전부 (진행중 → 완료). 리스트가 늘면 아래로 계속 붙고, 건물은 접혀 있다 --%>
+      <aside class="wc-side wc-all">
+        <div class="wc-side-head">
+          <h3>내 현장 확인 리스트 <b class="wc-all-cnt" id="wcAllCnt">0</b></h3>
+          <small>리스트를 끌어다 달력 날짜에 놓으면 일정에 들어갑니다. 눌러서 건물을 펼쳐 보세요.</small>
+        </div>
+        <div id="wcAll"></div>
+      </aside>
+    </div>
   </div>
 </div>
 
@@ -59,25 +70,29 @@
 <script src="${ctx}/resources/js/common.js"></script>
 <script>
   $(function () {
-    /* ---------- 리스트 정보 읽기 : LISTS[surveyId] = {title, itemCnt, doneCnt, status, items[]} ---------- */
-    var LISTS = {};
+    /* ---------- 리스트 정보 읽기 : LISTS[surveyId] = {id, title, itemCnt, doneCnt, status, items[]}, ORDER = 화면 순서 ---------- */
+    var LISTS = {}, ORDER = [];
     $('#wcData .d-list').each(function () {
-      var $l = $(this), item = Number($l.data('itemCnt')) || 0, done = Number($l.data('doneCnt')) || 0;
-      LISTS[$l.data('id')] = {
-        title: String($l.data('title')), itemCnt: item, doneCnt: done,
+      var $l = $(this), id = String($l.data('id')), item = Number($l.data('itemCnt')) || 0, done = Number($l.data('doneCnt')) || 0;
+      LISTS[id] = {
+        id: id, title: String($l.data('title')), itemCnt: item, doneCnt: done,
         status: done === 0 ? 'todo' : (done >= item ? 'done' : 'doing'),
         items: $l.find('i').map(function () {
           var $i = $(this);
           return { title: String($i.data('title')), addr: String($i.data('addr') || ''), score: $i.data('score'), checked: String($i.data('checked')) === 'true' };
         }).get()
       };
+      ORDER.push(id);
     });
     var ST_NAME = { todo: '조사 전', doing: '조사 중', done: '확인 완료' };
     var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
     function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
-    function listOf(ev) { return LISTS[ev.extendedProps.surveyId] || { title: ev.title, itemCnt: 0, doneCnt: 0, status: 'todo', items: [] }; }
+    function listOf(ev) { return LISTS[String(ev.extendedProps.surveyId)] || { title: ev.title, itemCnt: 0, doneCnt: 0, status: 'todo', items: [] }; }
+    function failMsg(xhr, def) { return (xhr && xhr.responseJSON && xhr.responseJSON.msg) || def; }
 
-    var selDate = ymd(new Date()), selEventId = null;
+    var selDate = ymd(new Date());
+    var openDay = {};   /* 오른쪽 위 : 펼친 일정 (scheduleId) */
+    var openAll = {};   /* 오른쪽 아래 : 펼친 리스트 (surveyId) */
 
     /* ---------- 달력 ---------- */
     var calendar = new FullCalendar.Calendar(document.getElementById('wcCalendar'), {
@@ -91,38 +106,101 @@
       dayCellContent: function (a) { return a.date.getDate(); },   /* "1일" 대신 "1" */
       editable: true,                        /* 일정을 끌어 다른 날로 */
       eventDurationEditable: false,
+      droppable: true,                       /* 오른쪽 리스트를 끌어와 놓기 */
       events: {
         url: '${ctx}/api/field/schedule.do',
         method: 'GET',
         failure: function () { Common.toast('달력 일정을 불러오지 못했습니다.'); }
       },
-      /* 상태(조사 전 · 조사 중 · 확인 완료)별 색 */
-      eventDidMount: function (info) { info.el.classList.add('st-' + listOf(info.event).status); },
+      /* 상태(조사 전 · 조사 중 · 확인 완료)별 색 + 오른쪽에 × (이 날짜에서 빼기) */
+      eventDidMount: function (info) {
+        info.el.classList.add('st-' + listOf(info.event).status);
+        if (!info.event.id) return;          /* 끌어다 놓는 중인 임시 막대에는 × 없음 */
+        var x = document.createElement('span');
+        x.className = 'fc-x'; x.title = '이 날짜에서 빼기'; x.textContent = '×';
+        info.el.appendChild(x);
+      },
       eventsSet: function () { renderSide(); countMonth(); },
       datesSet: function () { $('#wcTitle').text(calendar.view.title); countMonth(); },
-      dateClick: function (info) { selDate = info.dateStr; selEventId = null; renderSide(); },
+      dateClick: function (info) { selDate = info.dateStr; renderSide(); },
+      /* × 를 누르면 빼기, 막대의 나머지를 누르면 그 날짜 · 그 리스트를 오른쪽에 펼침 */
       eventClick: function (info) {
         info.jsEvent.preventDefault();
-        selDate = ymd(info.event.start); selEventId = info.event.id; renderSide();
+        if ($(info.jsEvent.target).closest('.fc-x').length) { removeEvent(info.event); return; }
+        selDate = ymd(info.event.start); openDay[info.event.id] = true; renderSide();
       },
       dayCellClassNames: function (a) { return ymd(a.date) === selDate ? ['wc-sel'] : []; },
       eventDrop: function (info) {
         Common.api('POST', 'api/field/schedule/move.do', { scheduleId: info.event.id, date: ymd(info.event.start) }).done(function (res) {
           if (!res || !res.ok) { info.revert(); Common.toast((res && res.msg) || '일정을 옮기지 못했습니다.'); return; }
-          selDate = ymd(info.event.start); selEventId = info.event.id; renderSide();
-        }).fail(function () { info.revert(); Common.toast('일정을 옮기지 못했습니다.'); });
+          selDate = ymd(info.event.start); renderSide();
+        }).fail(function (xhr) { info.revert(); Common.toast(failMsg(xhr, '일정을 옮기지 못했습니다.')); });
+      },
+      /* 오른쪽 리스트를 날짜에 놓음 → 저장. 저장되면 서버 기준으로 다시 그림 (scheduleId 를 받으려고) */
+      eventReceive: function (info) {
+        var ev = info.event, date = ymd(ev.start), title = ev.title;
+        ev.remove();
+        Common.api('POST', 'api/field/schedule/add.do', { surveyId: ev.extendedProps.surveyId, date: date }).done(function (res) {
+          if (res && res.ok) { selDate = date; calendar.refetchEvents(); Common.toast('"' + title + '" 을(를) ' + date + ' 에 넣었습니다.'); }
+          else Common.toast((res && res.msg) || '일정을 넣지 못했습니다.');
+        }).fail(function (xhr) { Common.toast(failMsg(xhr, '일정을 넣지 못했습니다.')); });
       }
     });
     calendar.render();
     $('#wcPrev').on('click', function () { calendar.prev(); });
     $('#wcNext').on('click', function () { calendar.next(); });
-    $('#wcToday').on('click', function () { calendar.today(); selDate = ymd(new Date()); selEventId = null; renderSide(); });
+    $('#wcToday').on('click', function () { calendar.today(); selDate = ymd(new Date()); renderSide(); });
+
+    /* 오른쪽 리스트 카드(위 · 아래 둘 다)의 머리 줄을 달력으로 끌 수 있게 (현장 확인 리스트 화면과 같은 방식).
+       살짝(8px) 움직여야 끌기로 보므로 클릭(⌄ 펼치기 · 수정 · 빼기)은 그대로 */
+    new FullCalendar.Draggable(document.getElementById('wcSideCol'), {
+      itemSelector: '.wc-card .wc-row',
+      minDistance: 8,
+      eventData: function (el) {
+        var L = LISTS[String($(el).closest('.wc-card').data('id'))] || {};
+        return { title: L.title, extendedProps: { surveyId: L.id }, create: true };
+      }
+    });
+
+    /* 일정 빼기 (리스트 자체는 남는다). 달력 × 와 오른쪽 위 [빼기] 가 같이 쓴다 */
+    function removeEvent(ev) {
+      if (!ev || !confirm('"' + ev.title + '" 을(를) ' + ymd(ev.start) + ' 일정에서 뺄까요?\n리스트 자체는 지워지지 않습니다.')) return;
+      Common.api('POST', 'api/field/schedule/delete.do', { scheduleId: ev.id }).done(function (res) {
+        if (res && res.ok) { delete openDay[ev.id]; ev.remove(); renderSide(); countMonth(); }
+        else Common.toast((res && res.msg) || '일정을 빼지 못했습니다.');
+      }).fail(function (xhr) { Common.toast(failMsg(xhr, '일정을 빼지 못했습니다.')); });
+    }
 
     /* 이번 달(보고 있는 달)에 들어 있는 리스트 수 */
     function countMonth() {
       var m = calendar.getDate().getMonth(), y = calendar.getDate().getFullYear();
-      var n = calendar.getEvents().filter(function (e) { return e.start.getMonth() === m && e.start.getFullYear() === y; }).length;
+      var n = calendar.getEvents().filter(function (e) { return e.id && e.start.getMonth() === m && e.start.getFullYear() === y; }).length;
       $('#wcCount').text(n);
+    }
+
+    /* ---------- 리스트 카드 하나 (머리 줄 + 접히는 건물 목록). 오른쪽 위 · 아래가 같이 쓴다 ---------- */
+    function card(L, key, open, acts) {
+      var $c = $('<div class="wc-card">').toggleClass('open', !!open).attr('data-id', L.id).attr('data-key', key);
+      var $row = $('<div class="wc-row">');
+      $row.append($('<span class="wc-grip" title="끌어서 달력 날짜에 놓기" aria-hidden="true">'));   /* ||| 손잡이 : 끌 수 있다는 표시 */
+      $row.append($('<i class="dot">').addClass('st-' + L.status));
+      $row.append($('<div class="tx">').append($('<b>').text(L.title)).append($('<small>').text(L.itemCnt + '개 건물 · ' + L.doneCnt + '개 완료')));
+      var $right = $('<div class="rt">');
+      if (acts) $right.append(acts);
+      else $right.append($('<span class="st-badge">').addClass('st-' + L.status).text(ST_NAME[L.status]));
+      $right.append($('<button type="button" class="wc-caret" title="건물 펼치기" aria-label="건물 펼치기">'));
+      $row.append($right);
+      $c.append($row);
+
+      var $bld = $('<div class="wc-bld">');
+      L.items.forEach(function (it) {
+        $bld.append($('<div class="wc-b">')
+          .append($('<div class="tx">').append($('<b>').text(it.title)).append($('<small>').text((it.addr ? it.addr + ' · ' : '') + (it.checked ? '확인 완료' : '조사 전'))))
+          .append($('<div class="sc">').append($('<b>').text(it.score)).append($('<small>').text('취약도'))));
+      });
+      if (!L.items.length) $bld.append($('<div class="wc-empty">').text('담긴 건물이 없습니다.'));
+      $c.append($bld);
+      return $c;
     }
 
     /* ---------- 오른쪽 패널 ---------- */
@@ -130,58 +208,39 @@
       /* 고른 날짜 칸 테두리 */
       $('#wcCalendar .fc-daygrid-day').removeClass('wc-sel').filter('[data-date="' + selDate + '"]').addClass('wc-sel');
 
+      /* 위 : 고른 날짜의 일정 */
       var d = new Date(selDate + 'T00:00:00');
-      var evs = calendar.getEvents().filter(function (e) { return ymd(e.start) === selDate; });
+      var evs = calendar.getEvents().filter(function (e) { return e.id && ymd(e.start) === selDate; });
       $('#wcDay').text((d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + WEEK[d.getDay()] + ')');
-      $('#wcDaySub').text('방문 리스트 ' + evs.length + '개');
-
+      $('#wcDaySub').text('방문 리스트 ' + evs.length + '개' + (evs.length ? ' · 끌어서 다른 날짜에도 넣을 수 있어요' : ''));
       var $lists = $('#wcLists').empty();
-      if (!evs.length) $lists.append($('<div class="wc-empty">').text('이 날짜에 넣은 리스트가 없습니다.'));
-      if (selEventId && !evs.some(function (e) { return e.id === selEventId; })) selEventId = null;
-      if (!selEventId && evs.length) selEventId = evs[0].id;
-
+      if (!evs.length) $lists.append($('<div class="wc-empty">').text('이 날짜에 넣은 리스트가 없습니다. 아래 "내 현장 확인 리스트" 에서 끌어다 놓으세요.'));
       evs.forEach(function (ev) {
         var L = listOf(ev);
-        var $row = $('<div class="wc-row">').toggleClass('on', ev.id === selEventId).attr('data-id', ev.id);
-        $row.append($('<i class="dot">').addClass('st-' + L.status));
-        $row.append($('<div class="tx">').append($('<b>').text(L.title)).append($('<small>').text(L.itemCnt + '개 건물 · ' + L.doneCnt + '개 완료')));
-        $row.append($('<span class="st-badge">').addClass('st-' + L.status).text(ST_NAME[L.status]));
-        var $act = $('<div class="acts">');
-        $act.append($('<a class="btn btn-line btn-sm">').attr('href', '${ctx}/fieldedit.do?listId=' + ev.extendedProps.surveyId).text('수정'));
-        $act.append($('<button type="button" class="btn btn-line btn-sm wc-del">').text('삭제'));
-        $row.append($act);
-        $lists.append($row);
+        var $act = $('<div class="acts">')
+          .append($('<a class="btn btn-line btn-sm">').attr('href', '${ctx}/fieldedit.do?listId=' + ev.extendedProps.surveyId).text('수정'))
+          .append($('<button type="button" class="btn btn-line btn-sm wc-del">').attr('data-ev', ev.id).text('빼기'));
+        $lists.append(card($.extend({}, L, { id: String(ev.extendedProps.surveyId) }), ev.id, openDay[ev.id], $act));
       });
 
-      /* 고른 리스트의 건물 */
-      var $bld = $('#wcBld').empty();
-      var sel = evs.filter(function (e) { return e.id === selEventId; })[0];
-      if (!sel) return;
-      var L = listOf(sel);
-      $bld.append($('<div class="cap">').text(L.title + ' · 건물 ' + L.items.length + '곳'));
-      L.items.forEach(function (it) {
-        $bld.append($('<div class="wc-b">')
-          .append($('<div class="tx">').append($('<b>').text(it.title)).append($('<small>').text((it.addr ? it.addr + ' · ' : '') + (it.checked ? '확인 완료' : '조사 전'))))
-          .append($('<div class="sc">').append($('<b>').text(it.score)).append($('<small>').text('취약도'))));
-      });
-      if (!L.items.length) $bld.append($('<div class="wc-empty">').text('담긴 건물이 없습니다.'));
+      /* 아래 : 내 리스트 전부 */
+      var $all = $('#wcAll').empty();
+      $('#wcAllCnt').text(ORDER.length);
+      if (!ORDER.length) $all.append($('<div class="wc-empty">').text('현장 확인 리스트가 없습니다. 현장 확인 리스트 화면에서 먼저 만들어 주세요.'));
+      ORDER.forEach(function (id) { $all.append(card(LISTS[id], id, openAll[id])); });
     }
 
-    /* 리스트 고르기 · 삭제(이 날짜에서 빼기, 리스트 자체는 남음) */
-    $('#wcLists').on('click', '.wc-row', function (e) {
-      if ($(e.target).closest('a, button').length) return;
-      selEventId = String($(this).data('id')); renderSide();
+    /* 카드 머리를 누르면 건물 접기/펼치기 (버튼 · 링크는 제외, ⌄ 는 포함) */
+    $('#wcLists, #wcAll').on('click', '.wc-row', function (e) {
+      if ($(e.target).closest('a, button:not(.wc-caret)').length) return;
+      var $c = $(this).closest('.wc-card'), key = String($c.data('key'));
+      var store = $(e.delegateTarget).is('#wcAll') ? openAll : openDay;
+      store[key] = !store[key];
+      $c.toggleClass('open', store[key]);
     });
-    $('#wcLists').on('click', '.wc-del', function () {
-      var ev = calendar.getEventById(String($(this).closest('.wc-row').data('id')));
-      if (!ev || !confirm('"' + ev.title + '" 을(를) ' + selDate + ' 일정에서 뺄까요?\n리스트 자체는 지워지지 않습니다.')) return;
-      Common.api('POST', 'api/field/schedule/delete.do', { scheduleId: ev.id }).done(function (res) {
-        if (res && res.ok) { ev.remove(); selEventId = null; renderSide(); countMonth(); }
-        else Common.toast((res && res.msg) || '일정을 빼지 못했습니다.');
-      }).fail(function () { Common.toast('일정을 빼지 못했습니다.'); });
-    });
+    /* 오른쪽 위 [빼기] */
+    $('#wcLists').on('click', '.wc-del', function () { removeEvent(calendar.getEventById(String($(this).data('ev')))); });
   });
 </script>
 </body>
 </html>
- 
