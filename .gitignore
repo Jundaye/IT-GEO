@@ -18,3 +18,4 @@ reference/*
 !reference/db/
 reference/db/*
 !reference/db/*.sql
+/bin/
