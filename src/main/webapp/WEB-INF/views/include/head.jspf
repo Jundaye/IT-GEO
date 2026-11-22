@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <link rel="stylesheet" href="${pageContext.request.contextPath}/resources/css/common.css">
   <c:if test="${not empty pageCss}">
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/resources/css/${pageCss}.css<c:if test="${not empty pageCssVer}">?v=${pageCssVer}</c:if>">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/resources/css/${pageCss}.css">
   </c:if>
   <c:if test="${not empty pageCss2}">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/resources/css/${pageCss2}.css">

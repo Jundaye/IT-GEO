@@ -3,7 +3,6 @@
 <%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
 <c:set var="pageTitle" value="보관함"/>
 <c:set var="pageCss" value="pages"/>
-<c:set var="pageCssVer" value="20261122m"/>  <%-- pages.css 를 고치면 이 값도 바꾼다 (브라우저에 남은 옛 css 를 쓰지 않게, head.jspf 가 ?v= 로 붙임) --%>
 <c:set var="activeMenu" value="archive"/>
 <c:set var="ctx" value="${pageContext.request.contextPath}"/>
 <!DOCTYPE html>

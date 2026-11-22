@@ -123,50 +123,11 @@ body:has(> .page-scroll) { overflow: hidden; }
 .card .card-head small { font-size: 12px; color: var(--text-2); }
 
 /* 현장확인 리스트 (03) */
-.fl-head { display: grid; grid-template-columns: 1fr 104px 230px 180px; padding: 8px 20px; font-size: 12px; color: var(--text-2); }
-.fl-card { background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 11px; }
-.fl-card { transition: border-color .12s, background-color .12s; }
-.fl-row { cursor: pointer; }
-.fl-card:not(.open):hover { background: var(--bg-hover); border-color: var(--text-3); }
-.fl-card.open { border-color: var(--primary); background: var(--bg-card); }
-.fl-body-foot { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
-.fl-del { background: none; border: 0; padding: 4px 2px; font-size: 12px; color: var(--text-2); cursor: pointer; }
-.fl-del:hover:not(:disabled) { color: var(--danger); text-decoration: underline; }
-.fl-del:disabled { color: var(--text-3); cursor: not-allowed; }
-.fl-actions .btn-sm { height: 30px; padding: 0 13px; }
-.fl-row { display: grid; grid-template-columns: 1fr 104px 230px 180px; align-items: center; padding: 13px 20px 16px; }
-.fl-row .t { font-size: 16px; font-weight: 700; }
-.fl-row .s { margin-top: 4px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
-.fl-row .n { font-size: 16px; font-weight: 700; }
 .prog { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .prog i { display: block; width: 110px; height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
 .prog i b { display: block; height: 100%; background: var(--primary); }
-.fl-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-/* 펼침/접힘 화살표 : 글자(⌄)는 글꼴 기준선 때문에 뒤집으면 위아래로 움직여서 CSS 로 그린다.
-   ∨ 모양의 실제 선 중심이 상자 가운데에 오도록 translateY 로 보정 → 펼쳐도 접어도 같은 자리 */
-.fl-actions .caret { position: relative; display: block; flex: none; background: none; border: 0; color: var(--text-2); cursor: pointer; width: 20px; height: 20px; margin-left: 6px; padding: 0; }
-.fl-actions .caret::before {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -5px 0 0 -5px;
-  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-}
-.fl-actions .caret:focus { outline: none; }   /* ^ 를 누른 뒤 네모 포커스 테두리 없음 (14단계) */
-.fl-card.open .caret { color: var(--primary); }
-.fl-card.open .caret::before { transform: translateY(2px) rotate(-135deg); }
-.fl-body { display: none; border-top: 1px solid var(--line-soft); padding: 12px 20px 16px; }
-.fl-card.open .fl-body { display: block; }
-.fl-body .cap { font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
-.fl-item { display: flex; align-items: center; gap: 12px; padding: 9px 8px 10px; }
-.fl-item + .fl-item { border-top: 1px solid var(--line-soft); }
-.fl-item:hover { background: var(--bg-hover); }
 .num { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; flex: 0 0 24px; }
 .num.done { background: var(--bg-card); border: 1px solid var(--line); color: var(--text-2); }
-.fl-item .ti { flex: 1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.fl-item .ti b { font-size: 16px; font-weight: 600; }
-.fl-item .ti span { font-size: 12px; line-height: 17px; color: var(--text-2); }
-.fl-item .sc { font-size: 15px; font-weight: 700; }
-.fl-new { display: grid; place-items: center; height: 80px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--text-2); font-size: 22px; }
-.fl-new:hover { color: var(--primary); border-color: var(--primary); }
 
 /* 리스트 수정 (03-1) */
 /* 보관함(왼쪽) 을 좁히고 가운데 화살표 칸 → 리스트(오른쪽) */
@@ -392,10 +353,6 @@ body:has(> .page-scroll) { overflow: hidden; }
 .route-modes b { grid-column: 1 / -1; }
 
 /* ===== 2026-11-09 화면 다듬기 ===== */
-/* 새 현장확인 리스트 박스 : 가운데 동그라미 + (시인성) */
-.fl-new { height: 64px; }
-.fl-new span { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; background: var(--bg-card); color: var(--primary); font-size: 18px; line-height: 1; transition: border-color .12s, background-color .12s, color .12s; }
-.fl-new:hover span { border-color: var(--primary); background: var(--primary); color: #fff; }
 
 /* 리스트 수정 : 제목 박스(card-head) 와 이름 입력 박스 사이 간격 */
 .fe-grid .fe-title { margin: 12px 12px 0; border: 1px solid var(--line-soft); }
@@ -424,16 +381,6 @@ body:has(> .page-scroll) { overflow: hidden; }
 .walk-info small { font-weight: 400; color: var(--text-2); }
 .walk-info .walk-sub { display: block; margin-top: 2px; font-size: 11.5px; white-space: normal; max-width: 520px; }
 
-/*리스트리스트 약도*/
-.fl-body-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: stretch; }
-.fl-map { position: relative; height: 240px; align-self: start; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--bg-card); }
-.fl-map .nmap { width: 100%; height: 100%; }
-.fl-map-zoom { position: absolute; right: 8px; top: 8px; z-index: 10; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.fl-map-zoom button { width: 28px; height: 28px; border: 0; background: var(--bg-panel); color: var(--text); font-size: 15px; cursor: pointer; }
-.fl-map-zoom button + button { border-top: 1px solid var(--line); }
-.fl-map-zoom button:hover { background: var(--bg-hover); }
-/* 화면이 좁으면 약도를 목록 아래로 */
-@media (max-width: 900px) { .fl-body-grid { grid-template-columns: 1fr; } .fl-map { height: 220px; } }
 
 /* ---------- 05 건물 확인 이력 : 타임라인만 스크롤 (archive-detail.js 가 max-height 를 화면에 맞춤, 아래는 스크립트 전 기본값) ---------- */
 .tl-scroll { max-height: calc(100vh - 360px); min-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; scrollbar-gutter: stable; }

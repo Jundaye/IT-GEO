@@ -92,11 +92,12 @@ LOAD DATA LOCAL INFILE 'C:/final_data/itgeo_db/yangcheon_population_dummy.csv' I
 
 -- 영등포 11560  +3,000,000  (UTF-8, 쉼표, 아파트_동~세대이동_방식 5개가 층수 바로 뒤)
 LOAD DATA LOCAL INFILE 'C:/final_data/itgeo_db/yeongdeungpo_population_dummy.csv' INTO TABLE stg_pop
-  CHARACTER SET euckr FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES
+  CHARACTER SET utf8mb4 FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n' IGNORE 1 LINES
   (mbr_id, hh_id, mbr_nm, hh_head_nm, head_rel, hh_mbr_cnt, single_hh_yn, sex, age, birth_day,
-   res_area, res_unknown_yn, risk_grade, bld_id, addr, use_nm, res_flr, dsbl_yn, dsbl_grade_nm, single_parent_yn,
+   res_area, res_unknown_yn, risk_grade, bld_id, addr, use_nm, res_flr, dong_nm, ho_nm, orig_res_flr, match_how, move_how,
+   dsbl_yn, dsbl_grade_nm, single_parent_yn,
    basic_pension_yn, near_poor_yn, nhis_arrears_yn, care_burden_yn, dsbl_type, basic_living_yn, hh_type, blind_spot_yn, blind_spot_type, sys_detect_yn,
-   detect_cnt, crisis_info, detect_result, non_target_rsn, support_type, dong_nm, ho_nm, orig_res_flr, match_how, move_how,
+   detect_cnt, crisis_info, detect_result, non_target_rsn, support_type,
    vet_type, vet_rel_type, vet_mon_amt, wage_tot_amt, biz_close_yn, biz_close_ind_nm, biz_open_day, biz_close_day, gi_rpt_yn,
    gi_amt, nps_type, nps_mon_amt, eitc_yn, eitc_amt, ctc_yn, ctc_amt, natl_tax_arrears_yn, natl_tax_arrears_amt,
    natl_tax_cert_yn, local_tax_arrears_yn, local_tax_arrears_amt, local_tax_cert_yn, ei_insured_yn, ei_loss_day, ui_yn, ui_mon_amt, recog_inc_mon_amt,

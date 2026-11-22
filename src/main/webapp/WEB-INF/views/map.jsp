@@ -2,7 +2,6 @@
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <c:set var="pageTitle" value="취약공간 분석 지도"/>
 <c:set var="pageCss" value="map"/>
-<c:set var="pageCssVer" value="20261121h"/><%-- map.css 를 고치면 이 값도 바꾼다 (브라우저가 예전 css 를 쓰지 않게) --%>
 <c:set var="activeMenu" value="map"/>
 <!DOCTYPE html>
 <html lang="ko">
@@ -272,6 +271,6 @@
 <script src="${pageContext.request.contextPath}/resources/js/map/map-result.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-3d.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-panel.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js?v=20261122m"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js"></script>
 </body>
 </html>
