@@ -19,6 +19,8 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 
+<%-- 화면 고정 + 내부 스크롤 (pages.css .page-scroll) : .dash2 는 최대 폭(1600px)이 있어 바깥 감싸개가 스크롤한다 → 스크롤바는 창 오른쪽 끝, 양옆 여백에서도 휠이 먹는다 --%>
+<div class="page-scroll">
 <div class="page dash2">
   <%-- ① 날씨 : 기온 → 특보(있을 때만) → 기상청 HH:00 --%>
   <div class="wx-line" id="wxLine" aria-live="polite">
@@ -137,6 +139,7 @@
     </section>
   </div>
 </div>
+</div><%-- /.page-scroll --%>
 
 <%-- 보고서 저장소 (폴더 아이콘) : 왼쪽 = 만든 보고서 목록, 오른쪽 = 내용 확인 · 종합 의견과 상태(초안/확정) 수정 · 저장 · PDF 로 보기 (dashboard.js) --%>
 <div class="ml-bg" id="rbModal" role="dialog" aria-modal="true" aria-labelledby="rbTitle" hidden>

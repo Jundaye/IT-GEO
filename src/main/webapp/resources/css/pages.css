@@ -2,7 +2,7 @@
    2026-11-08 모서리·색을 공통 값(var)으로 맞춤 */
 
 .page { margin: 0 auto; padding: 24px 24px 48px; }
-/* 화면 고정 + 내부 스크롤 (05 건물 확인 이력 · 업무 캘린더) : 헤더는 그대로 두고 헤더 아래 본문만 스크롤한다.
+/* 화면 고정 + 내부 스크롤 (05 건물 확인 이력 · 업무 캘린더 · 대시보드) : 헤더는 그대로 두고 헤더 아래 본문만 스크롤한다.
    .page 에 page-scroll 을 붙이면 본문이 헤더 아래 남은 높이를 다 쓰고, 넘치는 내용은 그 안에서만 움직인다 */
 body:has(> .page-scroll) { overflow: hidden; }
 .page-scroll { height: calc(100vh - var(--header-h)); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
