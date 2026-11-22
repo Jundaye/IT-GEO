@@ -1,11 +1,14 @@
 package itgeo.service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -58,9 +61,59 @@ public class MapService {
 		for (DongTO e : emds) byKey.put(e.getSggCd() + "|" + e.getEmdNm(), e);
 		for (DongTO a : dao.getAdmList(gu)) {
 			DongTO e = byKey.get(a.getSggCd() + "|" + a.getEmdNm());
-			if (e != null) e.getAdms().add(a);
+			if (e != null && isAdmPair(a.getSggCd(), a.getEmdNm(), a.getAdmNm())) e.getAdms().add(a);
 		}
 		return emds;
+	}
+
+	/**
+	 * 법정동 아래에 보여 줄 행정동 짝 (경계가 실제로 겹치는 짝 : 법정동 면적 10% 이상 또는 행정동 면적 30% 이상).
+	 * 건물 행정동은 좌표로 붙였기 때문에 경계선 근처 건물 몇 동이 옆 행정동으로 잡혀(신월동 아래 목5동 · 신정3동 등) 목록이 섞였다.
+	 * 그런 건물은 법정동 전체를 고르면 그대로 나오고, 행정동 목록에만 안 보인다. 표에 없는 법정동은 거르지 않는다
+	 */
+	private static final Map<String, Set<String>> ADM_PAIRS = new HashMap<>();
+	static {
+		// 양천구
+		pair("11470", "목동", "목1동", "목2동", "목3동", "목4동", "목5동");
+		pair("11470", "신월동", "신월1동", "신월2동", "신월3동", "신월4동", "신월5동", "신월6동", "신월7동");
+		pair("11470", "신정동", "신정1동", "신정2동", "신정3동", "신정4동", "신정6동", "신정7동");
+		// 구로구
+		pair("11530", "가리봉동", "가리봉동");
+		pair("11530", "개봉동", "개봉1동", "개봉2동", "개봉3동");
+		pair("11530", "고척동", "고척1동", "고척2동");
+		pair("11530", "구로동", "구로1동", "구로2동", "구로3동", "구로4동", "구로5동");
+		pair("11530", "궁동", "수궁동");
+		pair("11530", "신도림동", "신도림동");
+		pair("11530", "오류동", "오류1동", "오류2동");
+		pair("11530", "온수동", "수궁동");
+		pair("11530", "천왕동", "오류2동");
+		pair("11530", "항동", "항동");
+		// 영등포구
+		pair("11560", "당산동", "당산2동");
+		for (String g : new String[] { "1", "2", "3" }) pair("11560", "당산동" + g + "가", "당산1동");
+		for (String g : new String[] { "4", "5", "6" }) pair("11560", "당산동" + g + "가", "당산2동");
+		pair("11560", "대림동", "대림1동", "대림2동", "대림3동");
+		pair("11560", "도림동", "도림동");
+		for (int g = 1; g <= 6; g++) pair("11560", "문래동" + g + "가", "문래동");
+		pair("11560", "신길동", "신길1동", "신길3동", "신길4동", "신길5동", "신길6동", "신길7동", "영등포본동");
+		pair("11560", "양평동", "양평1동", "양평2동");
+		pair("11560", "양평동1가", "양평1동");
+		pair("11560", "양평동2가", "양평1동");
+		pair("11560", "양평동3가", "양평1동", "양평2동");
+		for (String g : new String[] { "4", "5", "6" }) pair("11560", "양평동" + g + "가", "양평2동");
+		pair("11560", "양화동", "양평2동");
+		pair("11560", "여의도동", "여의동");
+		pair("11560", "영등포동", "영등포본동", "도림동");   // 영등포동 건물 12% 가 도림동 (건물 좌표로 확인 2026-11-22)
+		for (int g = 1; g <= 8; g++) pair("11560", "영등포동" + g + "가", "영등포동");
+	}
+
+	private static void pair(String sggCd, String emdNm, String... admNms) {
+		ADM_PAIRS.computeIfAbsent(sggCd + "|" + emdNm, k -> new HashSet<>()).addAll(Arrays.asList(admNms));
+	}
+
+	static boolean isAdmPair(String sggCd, String emdNm, String admNm) {
+		Set<String> ok = ADM_PAIRS.get(sggCd + "|" + emdNm);
+		return ok == null || ok.contains(admNm);
 	}
 
 	/** 구 단위 (zoom 14 이하) : 경계 + "위험 N곳". 경계는 building 좌표의 볼록 껍질 */

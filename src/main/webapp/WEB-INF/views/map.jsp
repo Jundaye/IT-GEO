@@ -2,6 +2,7 @@
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <c:set var="pageTitle" value="취약공간 분석 지도"/>
 <c:set var="pageCss" value="map"/>
+<c:set var="pageCssVer" value="20261121h"/><%-- map.css 를 고치면 이 값도 바꾼다 (브라우저가 예전 css 를 쓰지 않게) --%>
 <c:set var="activeMenu" value="map"/>
 <!DOCTYPE html>
 <html lang="ko">
@@ -183,12 +184,18 @@
       <button type="button" id="zoomOut" title="축소">−</button>
     </div>
 
-    <%-- 로드뷰(파노라마) : 로드뷰를 켜고 지도를 누르면 지도 영역 위에 뜬다. 닫으면 지도로 --%>
-    <div class="pano-wrap" id="panoWrap">
-      <button type="button" class="pano-close" id="panoClose">× 로드뷰 닫기</button>
-      <span class="pano-target" id="panoTarget"></span>
+    <%-- 로드뷰(파노라마) : 로드뷰를 켜고 지도를 누르면 뜬다. 기본은 비율 보기(.split = 왼쪽 로드뷰 + 오른쪽 지도, 손잡이로 비율 조정), [크게 보기] 를 누르면 지도 영역 전체.
+         경계선 손잡이(#panoGrip)를 끌면 로드뷰 : 지도 비율이 같이 바뀌고, 두 번 누르면 기본 폭. 지도에는 지금 보는 위치 · 방향 표시가 따라 움직인다 (map-main.js) --%>
+    <div class="pano-wrap split" id="panoWrap">
+      <div class="pano-bar">
+        <button type="button" class="pano-close" id="panoClose">× 로드뷰 닫기</button>
+        <span class="pano-target" id="panoTarget"></span>
+        <button type="button" class="pano-size" id="panoSize" title="로드뷰 크게 보기 · 지도와 같이 보기">크게 보기</button>
+      </div>
       <div id="pano"></div>
+      <div class="pano-grip" id="panoGrip" title="끌어서 비율 조절 · 3:7 · 5:5 · 7:3 에 자석처럼 붙음 (두 번 누르면 50 : 50)"><span class="pano-ratio" id="panoRatio"></span></div>
     </div>
+    <div class="pano-guides" id="panoGuides"></div><%-- 비율 손잡이를 끄는 동안 3:7 · 5:5 · 7:3 자리 안내선 (map-main.js) --%>
   </main>
 
   <%-- ================= 건물 3D 입체보기 : 건물 상세 패널 바로 왼쪽 (map-3d.js · 브이월드 WebGL 3D, iframe 은 처음 열 때 불러옴) ================= --%>
@@ -265,6 +272,6 @@
 <script src="${pageContext.request.contextPath}/resources/js/map/map-result.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-3d.js"></script>
 <script src="${pageContext.request.contextPath}/resources/js/map/map-panel.js"></script>
-<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js"></script>
+<script src="${pageContext.request.contextPath}/resources/js/map/map-main.js?v=20261122m"></script>
 </body>
 </html>

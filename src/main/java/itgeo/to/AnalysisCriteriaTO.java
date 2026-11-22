@@ -38,6 +38,7 @@ public class AnalysisCriteriaTO {
 	private List<String> adms;        // 행정동 여러 개 "법정동|행정동" (지도 동 선택 복수 선택). 있으면 dong · adm 대신 이 목록
 	private String q;                 // 건물명·주소 검색어
 	private String status;            // 보관함 탭 : TODO | DOING | DONE (없으면 전체)
+	private String scen;              // 보관함 구분 선택칸 : base | rain | heat | cold | custom (저장할 때 쓴 가중치 시나리오, 없으면 전체)
 
 	// ---- 보관함 [상세 필터] (archive.do, 5-1) : 비어 있으면 조건 없음 ----
 	private List<String> factors;     // 취약 요인 키 (ugrnd rooftop gosiwon viol old flood low) → t.pt_<키> > 0
