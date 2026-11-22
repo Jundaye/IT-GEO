@@ -144,6 +144,9 @@
 .wp-row > b { height: 22px; line-height: 20px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; font-weight: 700; min-width: 48px; text-align: center; }
 .wp-row input { grid-column: 1 / -1; width: 100%; }
 .wp-row.locked .wp-name, .wp-row.locked > b { color: var(--text-3); }
+.wp-row > b i { font-style: normal; font-weight: 400; color: var(--text-2); }   /* "100 → 25점" 의 반영 점수 */
+.wp-sum { margin: 8px 0 0; font-size: 11.5px; color: var(--text-2); }
+.wp-sum.warn { color: var(--danger); }
 .wp-note { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: var(--text-3); }   /* 점수 규칙 안내 (15단계 B-7) */
 
 /* 패널 여닫기 버튼 (2차 11-17) : 좌 · 우 하나씩, 늘 세로 정가운데. 패널 폭이 바뀌면 패널 끝을 따라가고, 닫히면 화면 가장자리에 남는다 */

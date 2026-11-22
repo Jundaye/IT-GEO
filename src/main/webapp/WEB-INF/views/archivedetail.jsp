@@ -21,10 +21,10 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 
-<%-- 모바일 연동 · AI 보고서 스크립트가 읽는 값 (mobile-link.js · ai-report.js) --%>
+<%-- AI 보고서 스크립트가 읽는 값 (ai-report.js) --%>
 <c:set var="recCnt" value="${fn:length(d.records)}"/>
-<%-- data-from · data-to = AI 보고서 기간 (웹 이력 + 모바일 앱 확인 전 기록), data-app-cnt = 앱 확인 전 기록 수 --%>
-<div class="page page-scroll ad-page" id="adPage" data-bld="${b.bldId}" data-place="<c:out value='${title}'/>" data-rec-cnt="${recCnt}" data-app-cnt="${d.pendingAppCnt}"
+<%-- data-from · data-to = AI 보고서 기간 (현장조사이력 중 가장 오래된 날 ~ 가장 최근 날) --%>
+<div class="page page-scroll ad-page" id="adPage" data-bld="${b.bldId}" data-place="<c:out value='${title}'/>" data-rec-cnt="${recCnt}"
      data-from="${d.reportFrom}" data-to="${d.reportTo}">
   <div class="crumb"><a href="${ctx}/archive.do">보관함</a> › <c:out value="${title}"/></div>
   <c:if test="${not empty msg}"><div class="flash"><c:out value="${msg}"/></div></c:if>
@@ -97,18 +97,6 @@
         </div>
       </div>
 
-      <%-- 모바일 앱에서 받은 현장조사기록 중 아직 확인하지 않은 수 (mobile_link_record.status = NEW). 누르면 확인 모달 (include/mobile-link-modal.jspf) --%>
-      <div class="ml-banner-wrap">
-        <c:choose>
-          <c:when test="${d.pendingAppCnt > 0}">
-            <button type="button" class="ml-banner on" id="btnMobileLink" aria-haspopup="dialog"><i class="ml-dot" aria-hidden="true"></i><b>${d.pendingAppCnt}</b>개의 미확인 현장조사기록이 있습니다</button>
-          </c:when>
-          <c:otherwise>
-            <div class="ml-banner" role="status">확인할 현장조사기록이 없습니다</div>
-          </c:otherwise>
-        </c:choose>
-      </div>
-
       <%-- 현장 체크 입력 폼 → POST archivecheck.do (visit_history + survey_record) --%>
       <form class="card ad-form" id="checkForm" method="post" action="${ctx}/archivecheck.do" style="display:none">
         <input type="hidden" name="bldId" value="${b.bldId}">
@@ -150,22 +138,23 @@
           <div class="tl-item" data-yes="${r.hasYes}" data-no="${r.hasNo}">
             <i class="tl-dot ${s.first ? 'on' : ''}"></i>
             <div class="card tl-card">
-              <div class="tl-head"><b><c:out value="${r.visitedAt}"/></b><span class="muted"><c:if test="${s.first}">최근 확인 · </c:if>담당자 <c:out value="${r.userNm}"/> · 방문 결과 <c:out value="${r.resultLabel}"/></span>
-                <c:if test="${r.fromApp}"><span class="badge doing tl-app" title="모바일 앱에서 받은 기록을 AI 정리로 기재">앱 기록 · AI 정리</span></c:if></div>
-              <c:choose>
-                <c:when test="${not empty r.appPhotos}">
-                  <div class="tl-photos has-img">
-                    <c:forEach var="p" items="${r.appPhotos}">
-                      <a href="${ctx}/api/mobile-link/photo.do?photoId=${p.photoId}" target="_blank" rel="noopener" title="<c:out value='${p.label}'/>"><img src="${ctx}/api/mobile-link/photo.do?photoId=${p.photoId}" alt="<c:out value='${empty p.label ? "현장 사진" : p.label}'/>" loading="lazy"></a>
-                    </c:forEach>
-                  </div>
-                </c:when>
-                <c:otherwise><div class="tl-photos" title="사진은 현장 확인 앱 연동 예정"><div>외관</div><div>출입구 · 창문</div><div>우편함</div></div></c:otherwise>
-              </c:choose>
+              <div class="tl-head"><b><c:out value="${r.visitedAt}"/></b><span class="muted"><c:if test="${s.first}">최근 확인 · </c:if>담당자 <c:out value="${r.userNm}"/> · 방문 결과 <c:out value="${r.resultLabel}"/></span><c:if test="${r.fromApp}"><span class="tl-src">모바일 앱</span></c:if></div>
+              <c:if test="${not empty r.photos}">
+                <div class="tl-photos">
+                  <c:forEach var="p" items="${r.photos}">
+                    <c:url var="photoUrl" value="/api/mobile/photo.do"><c:param name="photoId" value="${p.photoId}"/></c:url>
+                    <a href="${photoUrl}" target="_blank" rel="noopener" title="<c:out value='${empty p.label ? "현장 사진" : p.label}'/>"><img src="${photoUrl}" alt="<c:out value='${empty p.label ? "현장 사진" : p.label}'/>" loading="lazy"></a>
+                  </c:forEach>
+                </div>
+              </c:if>
               <dl>
                 <dt>사전 탐지 요인</dt><dd><c:out value="${empty d.detectedText ? '-' : d.detectedText}"/></dd>
                 <dt>현장 체크</dt><dd><c:out value="${empty r.checkText ? '-' : r.checkText}"/></dd>
+                <c:if test="${not empty r.residentStatus}"><dt>거주자 상태</dt><dd><b class="tl-res tl-res--${r.residentStatus}"><c:out value="${r.residentStatus}"/></b></dd></c:if>
+                <c:if test="${not empty r.scores}"><dt>항목 점수</dt><dd><c:out value="${r.scoreText}"/> <span class="muted">(1 양호 ~ 5 위험)</span></dd></c:if>
+                <c:if test="${not empty r.supports}"><dt>필요한 지원</dt><dd><c:forEach var="sp" items="${r.supports}" varStatus="ss"><c:out value="${sp}"/>${ss.last ? '' : ' · '}</c:forEach></dd></c:if>
                 <dt>관찰 메모</dt><dd><c:out value="${r.content}"/></dd>
+                <c:if test="${not empty r.transcript}"><dt>녹취록</dt><dd><details class="tl-tr"><summary>녹취록 보기 (${fn:length(r.transcript)}자)</summary><div class="tl-tr-body"><c:out value="${r.transcript}"/></div></details></dd></c:if>
                 <c:if test="${r.scoreAdj != null}"><dt>점수 보정</dt><dd>${r.scoreAdj > 0 ? '+' : ''}${r.scoreAdj}</dd></c:if>
                 <dt>이관 기록</dt><dd><c:choose><c:when test="${not empty r.transferDept}"><b><c:out value="${r.transferDept}"/> <c:out value="${r.transferReq}"/> (<c:out value="${r.transferAt}"/> ${r.transferStatus == 'REPLIED' ? '회신' : '전달'})</b></c:when><c:otherwise><b>넘긴 부서 없음</b></c:otherwise></c:choose></dd>
               </dl>
@@ -230,7 +219,7 @@
       <div class="ai-report-wrap">
         <div class="rep-notice" id="rpNotice" role="status" hidden><i class="spin" aria-hidden="true"></i><span id="rpNoticeTxt"></span></div>
         <button type="button" class="btn btn-primary btn-block ai-report-btn" id="btnAiReport"
-          ${recCnt == 0 and d.pendingAppCnt == 0 ? 'disabled title="현장조사이력이나 모바일 앱 기록이 있어야 보고서를 만들 수 있습니다"' : ''}>AI 현장 확인보고서 생성</button>
+          ${recCnt == 0 ? 'disabled title="현장조사이력이 있어야 보고서를 만들 수 있습니다"' : ''}>AI 현장 확인보고서 생성</button>
       </div>
     </aside>
   </div>
@@ -241,11 +230,8 @@
   <input type="hidden" name="listId" id="addListId"><input type="hidden" name="factorIds" value="${empty d.factor ? '' : d.factor.factorId}">
 </form>
 
-<%@ include file="/WEB-INF/views/include/mobile-link-modal.jspf" %>
-
 <script src="${ctx}/resources/js/common.js"></script>
 <script src="${ctx}/resources/js/archive-detail.js"></script>
-<script src="${ctx}/resources/js/mobile-link.js"></script>
 <script src="${ctx}/resources/js/ai-report.js"></script>
 </body>
 </html>

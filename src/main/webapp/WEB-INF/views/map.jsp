@@ -95,7 +95,7 @@
       <button type="button" class="btn btn-primary" id="btnRun">▶ 분석 실행</button>
     </div>
 
-    <%-- 가중치 조정 팝업 (피그마 02 가중치 조정 열림) : 위험 유형 4묶음, 합계 항상 100 (map-layer.js 가 비율대로 맞춘다) --%>
+    <%-- 가중치 조정 팝업 (피그마 02 가중치 조정 열림) : 위험 유형 4묶음, 묶음마다 0~100. 점수에는 비율로 환산 (map-layer.js) --%>
     <div class="weight-pop" id="weightPop">
       <div class="wp-head"><b>가중치 조정</b><button type="button" class="link-muted" id="weightReset">초기화</button><button type="button" class="wp-close" id="weightClose" title="닫기">×</button></div>
       <div class="wp-row" data-gw="space"><div class="wp-name">주거 공간 <small>지하층 · 옥탑 · 고시원</small></div><b id="wv-space"></b><input type="range" id="w-space"></div>
@@ -103,7 +103,8 @@
       <div class="wp-row" data-gw="flood"><div class="wp-name">침수 위험 <small>침수 이력 · 저지대</small></div><b id="wv-flood"></b><input type="range" id="w-flood"></div>
       <div class="wp-row" data-gw="econ"><div class="wp-name">경제 여건 <small>저가 주택</small></div><b id="wv-econ"></b><input type="range" id="w-econ"></div>
       <%-- 점수 규칙 안내 (10단계 규칙, 15단계 B-7 문구) --%>
-      <p class="wp-note">주거 공간은 지하·고시원·옥탑 중 하나라도 맞으면 가중치 전부, 건물 상태·침수 위험은 켠 요인 중 맞은 비율만큼, 경제 여건은 맞으면 가중치 전부. 합계 100점 만점.</p>
+      <p class="wp-sum" id="wpSum"></p>
+      <p class="wp-note">묶음마다 0~100으로 정하면 비율대로 100점 만점에 나눠 반영합니다 (100·100·100·100이면 25점씩, 100·50·100·50이면 2:1:2:1). 주거 공간은 지하·고시원·옥탑 중 하나라도 맞으면 묶음 점수 전부, 건물 상태·침수 위험은 켠 요인 중 맞은 비율만큼, 경제 여건은 맞으면 전부.</p>
     </div>
   </aside>
 

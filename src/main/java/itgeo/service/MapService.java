@@ -185,15 +185,15 @@ public class MapService {
 	}
 
 	/** 가중치 4묶음은 각각 0~100, 합 100 이어야 계산한다 (15단계 B-6). 화면은 늘 100 을 맞추므로 주소를 직접 고친 경우 대비. 아니면 400 */
-	public static final String MSG_WEIGHT = "가중치 합계가 100이 되어야 분석을 실행할 수 있어요";
+	public static final String MSG_WEIGHT = "가중치는 묶음마다 0~100 사이로 정해 주세요";
+	public static final String MSG_WEIGHT_ZERO = "켜진 요인의 가중치를 하나 이상 0보다 크게 해 주세요";
+	/** 묶음 가중치는 각각 0~100, 켜진 묶음 합은 0 보다 커야 한다 (점수에는 비율로 환산 : AnalysisCriteriaTO.getSpacePt …) */
 	public static void assertWeights(AnalysisCriteriaTO c) {
 		int[] w = { c.getSpaceW(), c.getBldW(), c.getFloodW(), c.getEconW() };
-		int sum = 0;
 		for (int v : w) {
 			if (v < 0 || v > 100) throw new BadRequestException(MSG_WEIGHT);
-			sum += v;
 		}
-		if (sum != 100) throw new BadRequestException(MSG_WEIGHT);
+		if (c.getWeightSum() <= 0) throw new BadRequestException(MSG_WEIGHT_ZERO);
 	}
 
 	// 건물의 구 코드 (없는 건물이면 null). 구청 계정 관할 확인용 (15단계 A)
@@ -219,20 +219,20 @@ public class MapService {
 	private List<ScoreItemTO> buildScoreItems(BuildingTO b, AnalysisCriteriaTO c) {
 		List<ScoreItemTO> items = new ArrayList<>();
 		String none = "없음";
-		items.add(anyGroup("space", "주거 공간", c.getSpaceW(), new Object[][] {
+		items.add(anyGroup("space", "주거 공간", c.getSpacePt(), new Object[][] {
 				{ "반지하", b.getPtUgrnd(), c.isUgrndOn(), "반지하", b.getUgrndRes() > 0 ? "지하 거주 있음" : none, "지하 거주 등록" },
 				// 옥탑 여부는 건물 자료가 아니라 거주자 요약(옥탑층 거주 가구)이라 점수로만 알 수 있다 → 꺼져 있으면 "-"
 				{ "옥탑", b.getPtRooftop(), c.isRooftopOn(), "옥탑", b.getPtRooftop() > 0 ? "옥탑층 거주 있음" : c.isRooftopOn() ? none : "-", "옥탑층 거주" },
 				{ "고시원", b.getPtGosiwon(), c.isGosiwonOn(), "고시원", "고시원".equals(b.getSpType()) ? "고시원" : none, "대장 유형 고시원" } }));
-		items.add(ratioGroup("bld", "건물 상태", c.getBldW(), new Object[][] {
+		items.add(ratioGroup("bld", "건물 상태", c.getBldPt(), new Object[][] {
 				{ "노후 " + c.getOldYears() + "년+" + (b.getBldAge() != null ? " (" + b.getBldAge() + "년 경과)" : ""), b.getPtOld(), c.isOldOn(),
 					"노후", b.getBldAge() != null ? b.getBldAge() + "년 경과" : "자료 없음", "준공 " + c.getOldYears() + "년 이상" },
 				{ "위반건축물", b.getPtViol(), c.isViolOn(),
 					"위반건축물", "1".equals(b.getViolYn()) ? "대장 등재" : "0".equals(b.getViolYn()) ? none : "대장 미연계", "위반건축물 대장 등재" } }));
-		items.add(ratioGroup("flood", "침수 위험", c.getFloodW(), new Object[][] {
+		items.add(ratioGroup("flood", "침수 위험", c.getFloodPt(), new Object[][] {
 				{ "침수 " + b.getFloodCnt() + "회", b.getPtFlood(), c.isFloodOn(), "침수흔적", b.getFloodCnt() + "회", "침수 흔적 " + c.getFloodCnt() + "회 이상" },
 				{ "저지대 해발 " + b.getElevM() + "m", b.getPtLow(), c.isLowOn(), "저지대", String.format("%.1fm", b.getElevM()), "해발 " + fmt(c.getLowElev()) + "m 이하" } }));
-		items.add(anyGroup("econ", "경제 여건", c.getEconW(), new Object[][] {
+		items.add(anyGroup("econ", "경제 여건", c.getEconPt(), new Object[][] {
 				{ "저가 주택" + (b.getPricePct() != null ? " (백분위 " + b.getPricePct() + "%)" : ""), b.getPtCheap(), c.isCheapOn(),
 					"저가 주택", b.getPricePct() != null ? "백분위 " + fmt(b.getPricePct()) + "%" : "자료 없음", "공시가 백분위 " + fmt(c.getCheapPct()) + "% 이하" } }));
 		return items;
@@ -248,22 +248,23 @@ public class MapService {
 		return rows;
 	}
 
-	/** 하나라도 맞으면 묶음 가중치 전부. 요약 = 맞은 요인 이름 */
-	private static ScoreItemTO anyGroup(String key, String label, int weight, Object[][] members) {
+	/** 하나라도 맞으면 묶음 점수 전부 (weight = 합 100 으로 환산한 묶음 점수). 요약 = 맞은 요인 이름 */
+	private static ScoreItemTO anyGroup(String key, String label, double weight, Object[][] members) {
 		List<String> hits = new ArrayList<>(), names = new ArrayList<>();
 		boolean anyOn = false;
 		for (Object[] m : members) {
 			anyOn |= (Boolean) m[2];
 			if ((Boolean) m[2] && (Integer) m[1] > 0) { hits.add((String) m[0]); names.add((String) m[3]); }
 		}
-		int points = hits.isEmpty() ? 0 : weight;
+		int max = (int) Math.round(weight);
+		int points = hits.isEmpty() ? 0 : max;
 		String desc = !anyOn ? "분석 조건에서 제외" : hits.isEmpty() ? "해당 없음" : String.join(" · ", hits);
 		String summary = !anyOn ? "분석 조건에서 제외" : names.isEmpty() ? "해당 없음" : String.join(" · ", names);
-		return new ScoreItemTO(key, label, points, anyOn ? weight : 0, points > 0, desc, summary, factorRows(members));
+		return new ScoreItemTO(key, label, points, anyOn ? max : 0, points > 0, desc, summary, factorRows(members));
 	}
 
 	/** 묶음 가중치 × (맞은 요인 수 ÷ 켜진 요인 수). desc "노후 · 2개 중 1개", 요약 "2개 중 1개" */
-	private static ScoreItemTO ratioGroup(String key, String label, int weight, Object[][] members) {
+	private static ScoreItemTO ratioGroup(String key, String label, double weight, Object[][] members) {
 		List<String> hits = new ArrayList<>();
 		int on = 0;
 		for (Object[] m : members) {
@@ -275,7 +276,7 @@ public class MapService {
 		String desc = on == 0 ? "분석 조건에서 제외"
 				: (hits.isEmpty() ? "해당 없음" : String.join(" · ", hits)) + " · " + on + "개 중 " + hits.size() + "개";
 		String summary = on == 0 ? "분석 조건에서 제외" : hits.isEmpty() ? "해당 없음" : on + "개 중 " + hits.size() + "개";
-		return new ScoreItemTO(key, label, points, on == 0 ? 0 : weight, points > 0, desc, summary, factorRows(members));
+		return new ScoreItemTO(key, label, points, on == 0 ? 0 : (int) Math.round(weight), points > 0, desc, summary, factorRows(members));
 	}
 
 	private static String fmt(double v) {

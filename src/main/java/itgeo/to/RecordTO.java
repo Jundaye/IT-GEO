@@ -38,9 +38,24 @@ public class RecordTO {
 	private String checkText;                                     // "지하층 맞음 · 옥탑 아님 · 침수 판단 어려움 · 새로 발견: …"
 	private List<String> confirmed = new ArrayList<>();           // Y 로 확정된 요인 라벨 (분석 반영 칸)
 
-	// 모바일 앱에서 받은 현장조사기록을 [AI 정리]로 기재한 기록이면 채움 (mobile_link_record.record_id = 이 기록)
-	private boolean fromApp;                                      // 타임라인 "앱 기록 · AI 정리" 표시
-	private List<MobileLinkPhotoTO> appPhotos = new ArrayList<>(); // 앱에서 받은 사진 (없으면 기존 사진 자리 표시)
+	// 모바일 앱에서 저장한 기록만 (survey_record_detail · survey_photo, ArchiveService.fillAppDetail)
+	private String source;                                        // APP (웹 기록은 null)
+	private String residentStatus;                                // 양호 / 주의 / 긴급 / 부재
+	private Map<String, Integer> scores = new LinkedHashMap<>();  // 항목 키 → 1~5 (MobileService.SCORE_LABELS)
+	private List<String> supports = new ArrayList<>();            // 필요한 지원
+	private List<PhotoTO> photos = new ArrayList<>();             // 현장 사진
+	private String transcript;                                    // 녹취록 (survey_record_detail.transcript, 없으면 null)
+
+	/** 웹 타임라인용 "건물 주변 3 · 침수 흔적·배수 4 …" */
+	public String getScoreText() {
+		StringBuilder sb = new StringBuilder();
+		for (Map.Entry<String, Integer> e : scores.entrySet()) {
+			if (sb.length() > 0) sb.append(" · ");
+			sb.append(itgeo.service.MobileService.SCORE_LABELS.getOrDefault(e.getKey(), e.getKey())).append(' ').append(e.getValue());
+		}
+		return sb.toString();
+	}
+	public boolean isFromApp() { return "APP".equals(source); }
 
 	public String getResultLabel() {
 		if ("MET".equals(result)) return "면담";
