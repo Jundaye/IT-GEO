@@ -39,7 +39,7 @@ import itgeo.to.MobileLinkTO;
 import itgeo.to.RecordTO;
 
 /**
- * 모바일 앱 현장조사기록 연동 (reference/db/07_mobile_link.sql).
+ * 모바일 앱 현장조사기록 연동 (reference/db/07_ai_report.sql).
  * 웹은 앱 기능을 따로 만들지 않고, 앱이 보낸 JSON(항목별 취약점수 · 메모 · 사진 · 녹취록)을 받아 두었다가
  * 05 건물 확인 이력에서 확인 · 수정한 뒤 [AI 정리]로 요약해 기존 현장 확인 기록(visit_history + survey_record)으로 기재한다.
  *

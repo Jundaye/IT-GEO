@@ -3,7 +3,7 @@
 <mapper namespace="mapper-mobilelink">
 
 	<!-- ================================================================
-	     모바일 현장조사기록 연동 (reference/db/07_mobile_link.sql)
+	     모바일 현장조사기록 연동 (reference/db/07_ai_report.sql)
 	       mobile_link_record : 앱이 JSON 으로 보낸 기록 (NEW = 미확인, DONE = AI 정리로 이력에 기재)
 	       mobile_link_photo  : 그 기록의 사진
 	       ai_report          : AI 현장 확인보고서

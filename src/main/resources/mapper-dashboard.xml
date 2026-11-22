@@ -3,7 +3,7 @@
 <mapper namespace="mapper-dashboard">
 
 	<!-- ================================================================
-	     대시보드 (dashboard.do). 테이블 = reference/db/08_dashboard.sql(recent_view · monthly_report) + 업무 캘린더 survey_schedule(06) + 기존 현장확인 테이블
+	     대시보드 (dashboard.do). 테이블 = reference/db/07_ai_report.sql(recent_view · monthly_report) + 업무 캘린더 survey_schedule(06) + 기존 현장확인 테이블
 	     "업무 리스트에 저장한 건물" = 내 현장확인 리스트(survey_list)에 담긴 건물(survey_plan)
 	     "고위험 가구" = 가구 위험_등급(household.risk_grade) '고위험고립' → bld_resident_stat.high_iso_cnt (04_update.sql [D])
 	     건물 하나가 여러 리스트에 담겨 있어도 1번만 센다. 리스트 중 한 곳에서라도 확인 기록이 있으면 확인
