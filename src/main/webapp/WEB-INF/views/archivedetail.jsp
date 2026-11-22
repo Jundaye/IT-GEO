@@ -24,7 +24,7 @@
 <%-- 모바일 연동 · AI 보고서 스크립트가 읽는 값 (mobile-link.js · ai-report.js) --%>
 <c:set var="recCnt" value="${fn:length(d.records)}"/>
 <%-- data-from · data-to = AI 보고서 기간 (웹 이력 + 모바일 앱 확인 전 기록), data-app-cnt = 앱 확인 전 기록 수 --%>
-<div class="page ad-page" id="adPage" data-bld="${b.bldId}" data-place="<c:out value='${title}'/>" data-rec-cnt="${recCnt}" data-app-cnt="${d.pendingAppCnt}"
+<div class="page page-scroll ad-page" id="adPage" data-bld="${b.bldId}" data-place="<c:out value='${title}'/>" data-rec-cnt="${recCnt}" data-app-cnt="${d.pendingAppCnt}"
      data-from="${d.reportFrom}" data-to="${d.reportTo}">
   <div class="crumb"><a href="${ctx}/archive.do">보관함</a> › <c:out value="${title}"/></div>
   <c:if test="${not empty msg}"><div class="flash"><c:out value="${msg}"/></div></c:if>
