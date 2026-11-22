@@ -38,6 +38,10 @@ public class RecordTO {
 	private String checkText;                                     // "지하층 맞음 · 옥탑 아님 · 침수 판단 어려움 · 새로 발견: …"
 	private List<String> confirmed = new ArrayList<>();           // Y 로 확정된 요인 라벨 (분석 반영 칸)
 
+	// 모바일 앱에서 받은 현장조사기록을 [AI 정리]로 기재한 기록이면 채움 (mobile_link_record.record_id = 이 기록)
+	private boolean fromApp;                                      // 타임라인 "앱 기록 · AI 정리" 표시
+	private List<MobileLinkPhotoTO> appPhotos = new ArrayList<>(); // 앱에서 받은 사진 (없으면 기존 사진 자리 표시)
+
 	public String getResultLabel() {
 		if ("MET".equals(result)) return "면담";
 		if ("ABSENT".equals(result)) return "부재";

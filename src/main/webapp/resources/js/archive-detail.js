@@ -4,6 +4,7 @@
  *  - [현장 확인 결과 입력] 폼 펼치기 · 새로 발견 요인 줄 추가 · 점수 보정 슬라이더
  *  - [부서로 넘기기] 폼 (상단 버튼 · 기록 카드 버튼 → 그 기록에 연결) · 인수인계 메모 폼
  *  - [재확인 요청 ▾] = 현장확인 리스트에 담기 (fieldadditems.do)
+ *  - 타임라인은 이 칸만 스크롤 (#tlScroll 높이를 화면 아래 끝에 맞춤). 기록이 쌓여도 페이지는 길어지지 않는다
  */
 $(function () {
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -86,4 +87,25 @@ $(function () {
   });
 
   $('.pdf-btn').on('click', function () { Common.toast('확인서 PDF 는 연동 예정입니다.'); });
+
+  /* 타임라인 높이 : 화면 맨 아래까지 남은 높이 (최소 320px). 폼을 열고 닫거나 창 크기가 바뀌면 다시 맞춘다 */
+  function fitTimeline() {
+    var el = document.getElementById('tlScroll');
+    if (!el) return;
+    var top = el.getBoundingClientRect().top + window.pageYOffset;   // 문서 기준 위치 (스크롤과 상관없이)
+    el.style.maxHeight = Math.max(320, window.innerHeight - top - 16) + 'px';
+    /* 타임라인 아래 여백(페이지 padding 등) 때문에 아직 넘치면 그만큼 더 줄인다. 오른쪽 칸이 더 길어 넘치는 것은 타임라인과 상관없으니 그대로 */
+    var sec = el.closest('section'), aside = sec && sec.nextElementSibling;
+    for (var i = 0; i < 3; i++) {
+      var over = document.documentElement.scrollHeight - window.innerHeight;
+      if (over <= 0 || (aside && sec.getBoundingClientRect().bottom < aside.getBoundingClientRect().bottom)) break;
+      var cur = parseFloat(el.style.maxHeight);
+      if (cur <= 320) break;
+      el.style.maxHeight = Math.max(320, cur - over) + 'px';
+    }
+  }
+  fitTimeline();
+  $(window).on('resize load', fitTimeline);                                         // 글꼴 · 사진을 다 읽으면 위쪽 높이가 바뀔 수 있다
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTimeline);
+  $(document).on('click', '#btnCheckForm, #btnTransfer, .to-transfer, [data-close]', function () { setTimeout(fitTimeline, 260); });
 });

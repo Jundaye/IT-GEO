@@ -131,26 +131,15 @@
       <div class="fx-map-empty" id="fxMapEmpty" style="display:none"></div>
     </div>
   </div>
->>>>>>> refs/remotes/origin/main
 </div>
 
 <form id="flDeleteForm" method="post" action="${ctx}/fielddelete.do" style="display:none"><input type="hidden" name="listId" id="flDeleteId"><input type="hidden" name="tab" value="${tab}"></form>
 
-<<<<<<< HEAD
-<%-- 약도 5 --%>
-<script>
-  window.navermap_authFailure = function () { document.querySelectorAll('.fl-map .nmap').forEach(function (el) { el.innerHTML = '<div class="map-error"><b>네이버 지도 인증 실패</b></div>'; }); };
-</script>
-<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>"></script>
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
-=======
 <script>
   window.navermap_authFailure = function () { document.getElementById('map').innerHTML = '<div class="map-error"><b>네이버 지도 인증 실패</b></div>'; };
   window.FX_OPEN = '<c:out value="${openId}"/>';   /* fieldlist.do?open=리스트ID : 처음 펼칠 리스트 */
 </script>
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<c:out value='${naverClientId}'/>"></script>
->>>>>>> refs/remotes/origin/main
 <script src="${ctx}/resources/js/common.js"></script>
 <script src="${ctx}/resources/js/field-map.js"></script>
 <script>

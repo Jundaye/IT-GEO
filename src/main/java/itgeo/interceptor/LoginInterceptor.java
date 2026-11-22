@@ -18,6 +18,13 @@ public class LoginInterceptor implements HandlerInterceptor {
 		if(loginMember != null) {
 			return true;
 		}
+		// JSON API(api/...do)는 로그인 화면으로 보내지 않고 401 + {ok:false}. 화면의 Common.api 가 401 이면 로그인 화면으로 보낸다
+		if (request.getRequestURI().contains("/api/")) {
+			response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+			response.setContentType("application/json;charset=UTF-8");
+			response.getWriter().write("{\"ok\":false,\"login\":false,\"msg\":\"로그인이 필요합니다.\"}");
+			return false;
+		}
 		String contextPath = request.getContextPath();
 		response.sendRedirect(contextPath + "/loginform.do");
 		return false;

@@ -38,33 +38,6 @@
 .wc-calendar .fc-event .fc-event-title, .wc-calendar .fc-event .fc-event-main { color: var(--text) !important; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .wc-calendar .fc-daygrid-more-link { font-size: 11px; color: var(--text-2); margin-left: 8px; }
 
-<<<<<<< HEAD
-/* 오른쪽 패널 */
-.wc-side { position: sticky; top: 16px; background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.wc-side-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line-soft); }
-.wc-side-head h3 { margin: 0; font-size: 16px; }
-.wc-side-head small { display: block; margin-top: 3px; font-size: 12px; color: var(--text-2); }
-.wc-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
-.wc-row:hover, .wc-row.on { background: var(--bg-card); }
-.wc-row .dot { width: 7px; height: 7px; border-radius: 50%; }
-.wc-row .tx b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wc-row .tx small { font-size: 12px; color: var(--text-2); }
-.wc-row .acts { display: none; gap: 6px; }
-.wc-row.on .acts, .wc-row:hover .acts { display: flex; }
-.wc-row.on .st-badge, .wc-row:hover .st-badge { display: none; }
-.wc-row .wc-del { color: var(--danger, #f05252); }
-.st-badge { font-size: 11px; padding: 3px 7px; border-radius: 3px; color: var(--st); background: color-mix(in srgb, var(--st) 16%, transparent); white-space: nowrap; }
-.wc-bld { padding: 12px 16px 6px; }
-.wc-bld .cap { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
-.wc-b { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
-.wc-b:last-child { border-bottom: 0; }
-.wc-b .tx b { display: block; font-size: 14px; font-weight: 600; }
-.wc-b .tx small { font-size: 12px; color: var(--text-2); }
-.wc-b .sc { text-align: right; flex: 0 0 auto; }
-.wc-b .sc b { display: block; font-size: 17px; font-weight: 700; color: #f05252; }
-.wc-b .sc small { font-size: 11px; color: var(--text-3, #777); }
-.wc-empty { padding: 16px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
-=======
 /* 일정 막대 오른쪽 × (pages_calendar.css .fc-x 모양 그대로, 막대 안쪽 여백만 넓힘) */
 .wc-calendar .fc-event.fc-daygrid-event { position: relative; padding-right: 20px; }
 .wc-calendar .fc-x { color: var(--text-2); }
@@ -120,4 +93,3 @@
 .wc-b .sc small { font-size: 11px; color: var(--text-3, #777); }
 .wc-empty { padding: 16px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
  
->>>>>>> refs/remotes/origin/main

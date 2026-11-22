@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WellFAIR 건물 3D</title>
+<!--
+  map.jsp 건물 상세 패널 왼쪽 "건물 3D 입체보기" 상자 안에 iframe 으로 들어가는 페이지 (map-3d.js 가 띄운다)
+  - 브이월드 WebGL 3D 3.0 (Cesium). 로더가 document.write 를 쓰므로 메인 화면과 분리하려고 iframe 으로 뺐다
+  - 실제 브이월드 3D 건물 위에, 도로명주소 건물 외곽선(브이월드 데이터 API LT_C_SPBD)으로 층마다 반투명 상자를 겹쳐 칠한다
+  - 층 높이 = (브이월드 3D 건물 지붕 높이 - 지면 높이) ÷ 지상층수. 못 재면 층당 3m
+  - 메인 화면과는 postMessage 로만 주고받는다 : 받기 {type:'show', bld, floors, rooftop} / 보내기 {src:'bld3d', type:'ready'|'status'|'error'|'drawn'}
+-->
+<style>
+  html,body,#vmap{margin:0;width:100%;height:100%;background:#1b1b1e;overflow:hidden}
+</style>
+<!-- 브이월드 인증키 : 발급 때 등록한 서비스 URL(http://localhost:8080)에서만 동작 -->
+<script src="https://map.vworld.kr/js/webglMapInit.js.do?version=3.0&apiKey=0D3C160C-825C-4C22-83FB-3A0FD69AA0AE"></script>
+</head>
+<body>
+<div id="vmap"></div>
+<script>
+(function () {
+  var VW_KEY = '0D3C160C-825C-4C22-83FB-3A0FD69AA0AE';
+  /* 바닥 지도 : 브이월드 WMTS 레이어 이름. 'Base'(밝은 일반지도) · 'white'(흰 지도) · 'midnight'(어두운 지도) · null(브이월드 기본 항공사진 그대로)
+     건물은 별도 3D 타일이라 바닥을 바꿔도 실제 외관 사진이 그대로 남는다 */
+  var GROUND = 'midnight';
+  var ORIGIN = location.origin;
+  /* 걸린 시간 기록 (F12 콘솔 [bld3d] 시간) : iframe 열린 시점부터 ms */
+  var T = { script: Math.round(performance.now()) };
+  function ms() { return Math.round(performance.now()); }
+  var viewer = null, ds = null, pending = null, autoRotate = false, drawSeq = 0;
+  /* 선택 건물만 보기 : onlyOne 이 켜져 있으면 브이월드 3D 건물 중 targetKey(선택 건물 속성)와 같은 것만 보인다 */
+  var onlyOne = true, targetKey = null, keyVer = 0, hooked = [], clipRing = null;
+
+  function post(type, extra) { parent.postMessage(Object.assign({ src: 'bld3d', type: type }, extra || {}), ORIGIN); }
+  function rad(d) { return d * Math.PI / 180; }
+  function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function timeout(p, ms) { return Promise.race([Promise.resolve(p), delay(ms).then(function () { throw new Error('timeout'); })]); }
+
+  /* ---------- 1. 지도 시작 (브이월드 3.0 공식 예제 방식 : new vw.Map() → setOption → start) ---------- */
+  if (!window.vw || !vw.Map) {
+    post('error', { text: '브이월드 스크립트를 못 불러왔습니다. 인증키의 서비스 URL(http://localhost:8080) 등록을 확인하세요.' });
+    return;
+  }
+  try {
+    var map = new vw.Map();
+    map.setOption({
+      mapId: 'vmap',
+      initPosition: new vw.CameraPosition(new vw.CoordZ(126.884, 37.50, 3000), new vw.Direction(0, -60, 0)),
+      logo: true,
+      navigation: false
+    });
+    map.start();
+  } catch (e) { post('error', { text: '브이월드 지도 생성 오류 : ' + e.message }); console.error(e); return; }
+
+  var tries = 0;
+  (function wait() {
+    if (window.ws3d && ws3d.viewer && ws3d.viewer.scene && window.Cesium) { onReady(); return; }
+    if (++tries > 150) { post('error', { text: '브이월드 3D 뷰어를 찾지 못했습니다. F12 콘솔을 확인해 주세요.' }); return; }
+    setTimeout(wait, 200);
+  })();
+
+  function onReady() {
+    viewer = ws3d.viewer;
+    setGround();
+    T.ready = ms();
+    console.log('[bld3d] 시간 · 브이월드 스크립트 받기 ' + T.script + 'ms · 3D 엔진 준비 완료 ' + T.ready + 'ms (iframe 연 뒤부터)');
+    ds = new Cesium.CustomDataSource('wellfair');
+    viewer.dataSources.add(ds);
+    viewer.scene.globe.depthTestAgainstTerrain = false;   // 땅속(지하층) 상자도 보이게
+    /* 바뀐 게 있을 때만 그린다 (가만히 있으면 GPU 를 거의 안 씀) */
+    viewer.scene.requestRenderMode = true;
+    viewer.scene.maximumRenderTimeChange = Infinity;
+    viewer.clock.onTick.addEventListener(function () { if (autoRotate) { viewer.camera.rotateRight(0.004); viewer.scene.requestRender(); } });
+    post('ready');
+    if (pending) { var p = pending; pending = null; show(p); }
+    else viewer.useDefaultRenderLoop = false;    // 미리 켜 두기만 한 상태 : 마커를 누를 때까지 그리지 않음
+  }
+
+  /* 바닥 이미지 갈아끼우기. 브이월드가 나중에 자기 항공사진을 다시 넣으면 그것도 빼낸다 */
+  var groundLayer = null;
+  function setGround() {
+    if (!GROUND) return;
+    try {
+      var layers = viewer.imageryLayers;
+      layers.removeAll(false);
+      groundLayer = layers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+        url: 'https://api.vworld.kr/req/wmts/1.0.0/' + VW_KEY + '/' + GROUND + '/{z}/{y}/{x}.png',
+        tilingScheme: new Cesium.WebMercatorTilingScheme(), minimumLevel: 0, maximumLevel: 19, credit: '브이월드'
+      }));
+      viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString(GROUND === 'midnight' ? '#1b1b1e' : '#f2f2f0');
+      layers.layerAdded.addEventListener(function (layer) {
+        if (layer !== groundLayer) setTimeout(function () { if (layers.contains(layer)) { layers.remove(layer, false); viewer.scene.requestRender(); } }, 0);
+      });
+      console.log('[bld3d] 바닥 지도 :', GROUND);
+    } catch (e) { console.warn('[bld3d] 바닥 지도 바꾸기 실패, 브이월드 기본 그대로', e); }
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.origin !== ORIGIN || !e.data) return;
+    if (e.data.type === 'show') { if (viewer) show(e.data); else pending = e.data; }
+    if (e.data.type === 'rotate') autoRotate = !!e.data.on;
+    if (e.data.type === 'clear' && ds) { ds.entities.removeAll(); autoRotate = false; }
+    if (e.data.type === 'pause' && viewer) viewer.useDefaultRenderLoop = false;     // 상세 패널 닫힘 : 그리기 멈춤
+    if (e.data.type === 'resume' && viewer) { viewer.useDefaultRenderLoop = true; viewer.scene.requestRender(); }
+    if (viewer) viewer.scene.requestRender();
+    if (e.data.type === 'only') { onlyOne = !!e.data.on; keyVer++; applyClip(); viewer && viewer.scene.requestRender(); }
+  });
+
+  /* ---------- 2. 건물 외곽선 : 브이월드 데이터 API (도로명주소 건물 LT_C_SPBD), JSONP ---------- */
+  function jsonp(url) {
+    return new Promise(function (res, rej) {
+      var cb = 'vwcb' + Date.now() + Math.floor(Math.random() * 1e4), s = document.createElement('script');
+      var t = setTimeout(function () { done(); rej(new Error('timeout')); }, 7000);
+      function done() { clearTimeout(t); try { delete window[cb]; } catch (x) { window[cb] = undefined; } s.remove(); }
+      window[cb] = function (d) { done(); res(d); };
+      s.onerror = function () { done(); rej(new Error('load')); };
+      s.src = url + '&callback=' + cb;
+      document.head.appendChild(s);
+    });
+  }
+  function inRing(x, y, ring) {
+    var inside = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  function centroid(ring) { var x = 0, y = 0; ring.forEach(function (p) { x += p[0]; y += p[1]; }); return [x / ring.length, y / ring.length]; }
+  function outerRing(geom) {
+    if (!geom) return null;
+    if (geom.type === 'Polygon') return geom.coordinates[0];
+    if (geom.type === 'MultiPolygon') return geom.coordinates[0][0];
+    return null;
+  }
+  function fetchFootprint(lng, lat) {
+    var d = 0.00035;
+    var url = 'https://api.vworld.kr/req/data?service=data&version=2.0&request=GetFeature&format=json&errorformat=json'
+      + '&data=LT_C_SPBD&size=30&page=1&geometry=true&attribute=true&crs=EPSG:4326'
+      + '&geomFilter=BOX(' + (lng - d) + ',' + (lat - d) + ',' + (lng + d) + ',' + (lat + d) + ')'
+      + '&key=' + VW_KEY + '&domain=' + encodeURIComponent(ORIGIN);
+    return jsonp(url).then(function (r) {
+      var fc = r && r.response && r.response.result && r.response.result.featureCollection;
+      if (!fc || !fc.features || !fc.features.length) throw new Error((r && r.response && r.response.status) || 'NOT_FOUND');
+      var best = null, bestD = 1e9;
+      fc.features.forEach(function (f) {
+        var ring = outerRing(f.geometry); if (!ring || ring.length < 4) return;
+        if (inRing(lng, lat, ring)) { best = { ring: ring, props: f.properties }; bestD = -1; return; }
+        if (bestD < 0) return;
+        var c = centroid(ring), dd = Math.hypot((c[0] - lng) * 88000, (c[1] - lat) * 111000);
+        if (dd < bestD) { bestD = dd; best = { ring: ring, props: f.properties }; }
+      });
+      if (!best || bestD > 30) throw new Error('NO_MATCH');
+      return best;
+    });
+  }
+  /* 외곽선을 못 받으면 14m x 10m 사각형으로 */
+  function fallbackRing(lng, lat) {
+    var dx = 7 / 88000, dy = 5 / 111000;
+    return [[lng - dx, lat - dy], [lng + dx, lat - dy], [lng + dx, lat + dy], [lng - dx, lat + dy], [lng - dx, lat - dy]];
+  }
+  /* 상자가 실제 건물을 살짝 감싸도록 중심에서 k배 */
+  function scaleRing(ring, k) {
+    var c = centroid(ring.slice(0, -1));
+    return ring.map(function (p) { return [c[0] + (p[0] - c[0]) * k, c[1] + (p[1] - c[1]) * k]; });
+  }
+
+  /* ---------- 3. 높이 : 지면(지형) / 지붕(브이월드 3D 건물 윗면) ---------- */
+  function waitTiles(ms) {
+    var t0 = Date.now();
+    return new Promise(function (res) {
+      (function poll() { if (viewer.scene.globe.tilesLoaded || Date.now() - t0 > ms) res(); else setTimeout(poll, 100); })();
+    });
+  }
+  /* 지형 높이 : sampleTerrainMostDetailed → 안 되면 지형 타일이 다 받아진 뒤 globe.getHeight (덜 받아진 타일은 값이 틀림) */
+  function groundHeight(lng, lat, guess) {
+    var carto = Cesium.Cartographic.fromDegrees(lng, lat);
+    return timeout(Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]), 5000)
+      .then(function (r) { var h = r[0].height; if (h == null || isNaN(h)) throw 0; return h; })
+      .catch(function () {
+        return waitTiles(4000).then(function () { var h = viewer.scene.globe.getHeight(carto); return h != null ? h : guess; });
+      });
+  }
+  function roofHeight(lng, lat) {
+    if (!viewer.scene.sampleHeightSupported) return Promise.resolve(null);
+    var carto = Cesium.Cartographic.fromDegrees(lng, lat);
+    return timeout(viewer.scene.sampleHeightMostDetailed([carto]), 6000)
+      .then(function (r) { return r[0] && r[0].height != null ? r[0].height : null; })
+      .catch(function () { return null; });
+  }
+
+  /* ---------- 3-1. 선택 건물만 보기 ---------- */
+  function tilesets() {
+    var out = [], prims = viewer.scene.primitives;
+    (function walk(col) {
+      for (var i = 0; i < col.length; i++) {
+        var x = col.get(i);
+        if (x instanceof Cesium.Cesium3DTileset) out.push(x);
+        else if (x && typeof x.get === 'function' && typeof x.length === 'number') walk(x);
+      }
+    })(prims);
+    return out;
+  }
+  function featKey(f) {
+    try {
+      var ids = f.getPropertyIds ? f.getPropertyIds() : (f.getPropertyNames ? f.getPropertyNames() : []);
+      if (!ids || !ids.length) return null;
+      return ids.map(function (k) { return k + '=' + f.getProperty(k); }).join('|');
+    } catch (e) { return null; }
+  }
+  /* 화면에 보이는 타일마다 : 선택 건물이 아니면 숨김 (타일 내용이 바뀌거나 대상이 바뀔 때만 다시 계산) */
+  function hookTilesets() {
+    tilesets().forEach(function (ts) {
+      if (hooked.indexOf(ts) >= 0) return;
+      hooked.push(ts);
+      ts.tileVisible.addEventListener(function (tile) {
+        var c = tile.content;
+        if (!c || !c.featuresLength || c._wfVer === keyVer) return;
+        c._wfVer = keyVer;
+        for (var i = 0; i < c.featuresLength; i++) {
+          var f = c.getFeature(i);
+          f.show = !onlyOne || !targetKey || featKey(f) === targetKey;
+        }
+      });
+    });
+  }
+  /* 속성으로 못 고르면 (속성 없는 모델) 외곽선 바깥을 잘라낸다. Cesium 1.117+ 의 ClippingPolygon 이 있을 때만 */
+  function applyClip() {
+    var can = Cesium.ClippingPolygonCollection && Cesium.ClippingPolygon;
+    tilesets().forEach(function (ts) {
+      try {
+        if (can && onlyOne && !targetKey && clipRing) {
+          var flat = []; scaleRing(clipRing, 1.15).forEach(function (p) { flat.push(p[0], p[1]); });
+          ts.clippingPolygons = new Cesium.ClippingPolygonCollection({
+            polygons: [new Cesium.ClippingPolygon({ positions: Cesium.Cartesian3.fromDegreesArray(flat) })], inverse: true });
+        } else if (ts.clippingPolygons && ts.clippingPolygons.length) {
+          ts.clippingPolygons = undefined;
+        }
+      } catch (e) { console.warn('[bld3d] clipping', e); }
+    });
+  }
+  function toWindow(pos) {
+    var T = Cesium.SceneTransforms;
+    return T.worldToWindowCoordinates ? T.worldToWindowCoordinates(viewer.scene, pos) : T.wgs84ToWindowCoordinates(viewer.scene, pos);
+  }
+  /* 외곽선 안 여러 점에서 하늘 → 땅 수직선을 쏴서 처음 맞는 브이월드 건물(Cesium3DTileFeature)을 고른다.
+     (화면 기준으로 집으면 카메라 각도에 따라 바로 옆·뒤 건물이 잡힘) 가장 많이 맞은 건물 = 선택 건물 */
+  function rayPick(lng, lat, ground) {
+    var from = Cesium.Cartesian3.fromDegrees(lng, lat, ground + 400), to = Cesium.Cartesian3.fromDegrees(lng, lat, ground - 20);
+    var dir = Cesium.Cartesian3.normalize(Cesium.Cartesian3.subtract(to, from, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+    try {
+      var r = viewer.scene.pickFromRay(new Cesium.Ray(from, dir), ds.entities.values);
+      return r && r.object instanceof Cesium.Cesium3DTileFeature ? r.object : null;
+    } catch (e) { console.warn('[bld3d] pickFromRay', e); return null; }
+  }
+  function screenPick(pos) {
+    var win = toWindow(pos);
+    if (!win) return null;
+    try {
+      var hits = viewer.scene.drillPick(win, 10);
+      for (var i = 0; i < hits.length; i++) if (hits[i] instanceof Cesium.Cesium3DTileFeature) return hits[i];
+    } catch (e) { console.warn(e); }
+    return null;
+  }
+  function pickTarget(seq, ring, c, ground, n) {
+    if (seq !== drawSeq) return;
+    hookTilesets();
+    var pts = [c].concat(scaleRing(ring, 0.5).slice(0, -1)), votes = {}, best = null;
+    pts.forEach(function (p) {
+      var f = rayPick(p[0], p[1], ground), k = f && featKey(f);
+      if (k) { votes[k] = (votes[k] || 0) + 1; if (!best || votes[k] > votes[best]) best = k; }
+    });
+    if (best) { targetKey = best; keyVer++; applyClip(); viewer.scene.requestRender(); console.log('[bld3d] 선택 건물', best, votes); return; }
+    if (n < 6) { setTimeout(function () { pickTarget(seq, ring, c, ground, n + 1); }, 700); return; }
+    console.warn('[bld3d] 브이월드 건물 속성을 못 찾아 외곽선 자르기로 대신합니다. Cesium', Cesium.VERSION);
+    applyClip();
+  }
+
+  /* ---------- 4. 그리기 ---------- */
+  function show(msg) {
+    var seq = ++drawSeq, b = msg.bld;
+    viewer.useDefaultRenderLoop = true;
+    var t0 = ms(), tFp = null;
+    ds.entities.removeAll();
+    targetKey = null; clipRing = null; keyVer++; applyClip();   // 새 건물 고르기 전까지는 다 보이게
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    var guessGround = (b.elevM || 20) + 24;    // 표고 + 서울 지오이드고 대략
+    var upCnt = msg.floors.filter(function (f) { return f.idx > 0; }).length;
+    var target = Cesium.Cartesian3.fromDegrees(b.lng, b.lat, guessGround + upCnt * 1.5);
+    post('status', { text: '건물 위치로 이동 중…' });
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 20), {
+      offset: new Cesium.HeadingPitchRange(rad(25), rad(-28), Math.max(90, upCnt * 14)),
+      duration: msg.visible ? 1.2 : 0      // 안 보이는 채로 미리 그릴 땐 날아가는 연출 없이 바로 이동
+    });
+    var fpP = fetchFootprint(b.lng, b.lat).then(function (r) { tFp = ms() - t0; return r; }, function (e) { tFp = ms() - t0; console.warn('[bld3d] 외곽선 못 받음', e); return null; });
+    delay(msg.visible ? 1300 : 150).then(function () { return fpP; }).then(function (fp) {
+      if (seq !== drawSeq) return;
+      post('status', { text: '실제 건물 높이 재는 중…' });
+      var ring = fp ? fp.ring : fallbackRing(b.lng, b.lat);
+      var c = centroid(ring.slice(0, -1));
+      var tH = ms();
+      return Promise.all([groundHeight(c[0], c[1], guessGround), roofHeight(c[0], c[1])]).then(function (h) {
+        if (seq !== drawSeq) return;
+        draw(msg, ring, c, h[0], h[1], fp);
+        console.log('[bld3d] 시간 · 건물 그리기 ' + (ms() - t0) + 'ms (외곽선 API ' + tFp + 'ms · 높이 재기 ' + (ms() - tH) + 'ms · 카메라 이동 대기 ' + (msg.visible ? 1300 : 150) + 'ms 포함)');
+      });
+    }).catch(function (e) { console.error(e); post('error', { text: '3D 표시 오류 : ' + (e && e.message || e) }); });
+  }
+
+  function draw(msg, ring, c, ground, roof, fp) {
+    var floors = msg.floors, up = floors.filter(function (f) { return f.idx > 0; }), down = floors.filter(function (f) { return f.idx < 0; });
+    if (roof != null && ground > roof) ground = roof - up.length * 3;   // 지형 값이 이상하면 지붕 기준으로
+    var rawH = roof != null ? roof - ground : null;
+    var measured = rawH != null && rawH > up.length * 2 && rawH < up.length * 7 + (msg.rooftop ? 4 : 0);
+    var upH = measured ? (rawH - (msg.rooftop ? 2.6 : 0)) : up.length * 3;
+    var fh = Math.max(2.2, upH / up.length), bh = 3;
+    var outer = scaleRing(ring, 1.05);
+    var flat = []; outer.forEach(function (p) { flat.push(p[0], p[1]); });
+    var hier = Cesium.Cartesian3.fromDegreesArray(flat);
+    // 라벨은 외곽선에서 가장 동쪽 꼭짓점 옆
+    var east = outer.reduce(function (a, p) { return p[0] > a[0] ? p : a; }, outer[0]);
+
+    function band(bottom, top, f, positions) {
+      var col = Cesium.Color.fromCssColorString(f.color);
+      ds.entities.add({
+        polygon: { hierarchy: positions || hier, height: bottom, extrudedHeight: top,
+          material: col.withAlpha(0.42), outline: true, outlineColor: col.withAlpha(0.95) }
+      });
+      ds.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(east[0], east[1], (bottom + top) / 2),
+        label: { text: f.label, font: '500 12px "Noto Sans KR","Malgun Gothic",sans-serif',
+          fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('rgba(20,20,22,.82)'),
+          backgroundPadding: new Cesium.Cartesian2(6, 3), pixelOffset: new Cesium.Cartesian2(14, 0),
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT, verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY }
+      });
+    }
+    down.forEach(function (f) { var n = -f.idx; band(ground - n * bh + 0.05, ground - (n - 1) * bh - 0.05, f); });
+    up.forEach(function (f) { band(ground + (f.idx - 1) * fh + 0.05, ground + f.idx * fh - 0.05, f); });
+    var top = ground + up.length * fh;
+    if (msg.rooftop) {
+      var small = scaleRing(ring, 0.45), sf = []; small.forEach(function (p) { sf.push(p[0], p[1]); });
+      band(top + 0.05, top + 2.6, msg.rooftop, Cesium.Cartesian3.fromDegreesArray(sf));
+      top += 2.6;
+    }
+    // 360° 회전 : 건물 중심에 카메라를 묶는다 (왼쪽 드래그 = 건물 둘레로 회전, 휠 = 확대/축소)
+    var center = Cesium.Cartesian3.fromDegrees(c[0], c[1], ground + (top - ground) / 2 - (down.length ? 1.5 : 0));
+    var range = Math.max(45, (top - ground + down.length * bh) * 2.6);
+    viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(rad(25), rad(-22), range));
+    clipRing = ring;
+    var mySeq = drawSeq;
+    setTimeout(function () { pickTarget(mySeq, ring, c, ground, 0); }, 900);
+    post('drawn', {
+      measured: measured, height: Math.round((top - ground) * 10) / 10, floorH: Math.round(fh * 10) / 10,
+      footprint: !!fp, bdName: fp && fp.props ? (fp.props.buld_nm || fp.props.bld_nm || '') : ''
+    });
+  }
+})();
+</script>
+</body>
+</html>

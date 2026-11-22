@@ -34,6 +34,8 @@
   		<exclude-mapping path="/loginform.do"/>
   		<exclude-mapping path="/login.do"/>
   		<exclude-mapping path="/logout.do"/>
+  		<!-- 모바일 현장조사기록 받기 : 로그인 세션이 없으면 연동 토큰(X-Link-Token)으로 확인 (MobileLinkRESTController.receive) -->
+  		<exclude-mapping path="/api/mobile-link/receive.do"/>
   		<beans:bean class="itgeo.interceptor.LoginInterceptor"></beans:bean>
   	</interceptor>
   </interceptors>

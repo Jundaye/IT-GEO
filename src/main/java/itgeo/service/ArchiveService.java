@@ -75,6 +75,9 @@ public class ArchiveService {
 	@Autowired
 	MemberService memberService;
 
+	@Autowired
+	MobileLinkService mobileLinkService;     // 모바일 현장조사기록 연동 (미확인 건수 · 타임라인 사진)
+
 	// 탭 숫자 (신규 / 진행중 / 완료됨). gu 가 있으면 그 구의 보관함만 (구청 계정 = 소속 구, 서울시청 = 고른 구)
 	public StatusCountTO getStatusCount(long userId, String gu) {
 		StatusCountTO cnt = dao.getStatusCount(userId, gu);
@@ -242,7 +245,11 @@ public class ArchiveService {
 			parseCheck(r);
 			if (r.getScoreAdj() != null) adj += r.getScoreAdj();
 		}
-		d.setRecords(recs);
+		mobileLinkService.fillTimeline(recs);            // 앱에서 받아 [AI 정리]로 기재한 기록 : 표시 + 사진
+		d.setRecords(recs);                              // getRecordList 가 방문 일시 내림차순 (최근이 위)
+		d.setPendingAppCnt(mobileLinkService.getPendingCount(bldId));
+		String[] pr = d.getPendingAppCnt() > 0 ? mobileLinkService.getPendingRange(bldId) : null;   // AI 보고서 기간 안내 (앱 확인 전 기록 포함)
+		if (pr != null) { d.setPendingAppFrom(pr[0]); d.setPendingAppTo(pr[1]); }
 		d.setTransfers(dao.getTransferList(bldId));
 		d.setMemos(dao.getMemoList(bldId));
 
