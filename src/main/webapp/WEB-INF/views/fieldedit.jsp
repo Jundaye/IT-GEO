@@ -26,7 +26,7 @@
     <div class="fe-grid">
       <%-- 왼쪽 : 보관함 건물 --%>
       <div class="card">
-        <div class="card-head"><h3>보관함 건물 <span id="pickCnt">${fn:length(pickList)}</span></h3></div>
+        <div class="card-head"><h3>보관함 건물 <span id="pickCnt">${fn:length(pickList)}</span></h3><button type="button" class="btn btn-line btn-sm" id="btnRecommend" title="보관함 건물을 하루 6곳씩 묶어 추천합니다 (1순위 고정, 1km 안 90점 이상·부재 우선, K-means 같은 군집 우선)">하루치 방문 추천</button></div>
         <div class="pick-list" id="pickList">
           <c:forEach var="p" items="${pickList}">
             <label class="pick-row" data-factor="${p.factorId}">
@@ -88,6 +88,20 @@
       <div class="rt" data-mode="transit" title="대중교통 (15km/h)">${icoTransit}<span><small>대중교통</small><b id="tTransit">0</b>분</span></div>
       <div class="rt" data-mode="car" title="자동차 (20km/h)">${icoCar}<span><small>자동차</small><b id="tCar">0</b>분</span></div>
     </div>
+  </div>
+</div>
+
+<%-- 하루치 방문 묶음 추천 (field-edit.js · api/field/recommend.do) --%>
+<div class="du-bg" id="recBg">
+  <div class="du-modal rec-modal" role="dialog" aria-labelledby="recTitle">
+    <div class="du-head">
+      <div class="du-head-txt">
+        <h3 id="recTitle">하루치 방문 추천</h3>
+        <p id="recSub">보관함 건물을 하루 6곳씩 묶었습니다. 남은 후보 중 1순위를 먼저 넣고, 1km 안에서 90점 이상과 최근 방문 부재를 우선한 뒤 같은 군집을 채웁니다.</p>
+      </div>
+      <button type="button" class="du-x" id="recClose" title="닫기">×</button>
+    </div>
+    <div class="du-body" id="recBody"></div>
   </div>
 </div>
 

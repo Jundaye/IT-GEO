@@ -147,6 +147,14 @@ $(function () {
     items.push({ factorId: p.factorId, bldId: p.bldId, title: p.title, lat: p.lat, lng: p.lng, score: p.score, checked: false, sggCd: p.sggCd });
     render();
   }
+  /* 추천 묶음에서 담기 : 보관함 목록(D.pick)에 없는 factor 여도 추천 응답의 값으로 담는다 */
+  function addCand(c) {
+    if (items.some(function (it) { return it.bldId === c.bldId; })) return true;
+    var gu = D.gu || (items[0] && items[0].sggCd);
+    if (gu && c.sggCd && c.sggCd !== gu) return false;
+    items.push({ factorId: c.factorId, bldId: c.bldId, title: c.title, lat: c.lat, lng: c.lng, score: c.score, checked: false, sggCd: c.sggCd });
+    return true;
+  }
   function remove(factorId) {
     items = items.filter(function (it) { return it.factorId !== factorId; });
     render();
@@ -191,6 +199,59 @@ $(function () {
     render();
   });
   $('#btnOptimize').on('click', optimize);
+
+  /* ---------- 하루치 방문 추천 (api/field/recommend.do) ----------
+   *  구 = 리스트의 구 > 담긴 건물의 구 > 출발지 선택. 지금 담긴 건물은 후보에서 뺀다.
+   *  [이 묶음 담기] → 담고 최적 동선 정렬. 묶음은 담긴 건물이 빠진 채로 다시 받지 않는다 (창을 다시 열면 새로 계산) */
+  var REASON_CLS = { '남은 후보 중 1순위': 'r-seed', '최근 방문 부재': 'r-absent', '90점 이상': 'r-high', '기준 건물과 같은 군집': 'r-cluster', '반경 1km 안 추가': 'r-near' };
+  function recGu() { return D.lockGu || D.gu || (items[0] && items[0].sggCd) || $start.val(); }
+  function openRec() {
+    $('#recBody').html('<div class="empty">묶는 중…</div>');
+    $('#recBg').addClass('open');
+    Common.api('GET', 'api/field/recommend.do', { gu: recGu(), perDay: 6, exceptBldIds: items.map(function (it) { return it.bldId; }) })
+      .done(function (r) {
+        if (!r || !r.ok) { $('#recBody').html('<div class="du-err">' + esc((r && r.msg) || '추천을 만들지 못했습니다.') + '</div>'); return; }
+        renderRec(r);
+      })
+      .fail(function () { $('#recBody').html('<div class="du-err">추천을 불러오지 못했습니다.</div>'); });
+  }
+  function renderRec(r) {
+    var ex = r.excluded || {}, exTxt = [];
+    if (ex.inList) exTxt.push('이 리스트에 담긴 ' + ex.inList + '곳');
+    if (ex.scheduled) exTxt.push('다른 리스트에 잡힌 ' + ex.scheduled + '곳');
+    if (ex.visited) exTxt.push('방문 결과가 있는 ' + ex.visited + '곳');
+    if (ex.noCoord) exTxt.push('좌표 없는 ' + ex.noCoord + '곳');
+    var head = '<div class="rec-sum"><b>' + esc(r.guName) + '</b> 보관함 ' + r.total + '곳 중 ' + r.used + '곳을 ' + (r.bundles || []).length + '개 묶음으로 나눴습니다.'
+      + (exTxt.length ? '<br><span class="muted">제외 : ' + exTxt.join(', ') + '</span>' : '') + '</div>';
+    if (!r.bundles || !r.bundles.length) { $('#recBody').html(head + '<div class="empty">추천할 건물이 없습니다. 지도에서 ' + esc(r.guName) + ' 건물을 보관함에 먼저 저장하세요.</div>'); return; }
+    var html = r.bundles.map(function (b, bi) {
+      var rows = b.items.map(function (c, i) {
+        var chips = (c.reasons || []).map(function (t) { return '<span class="r-chip ' + (REASON_CLS[t] || '') + '">' + esc(t) + '</span>'; }).join('');
+        return '<li class="rec-item' + (i === 0 ? ' seed' : '') + '"><span class="rk">' + c.rank + '</span>'
+          + '<span class="ti">' + esc(c.title) + '<small>' + esc(c.factorText || '요인 없음') + (c.vulnHhCnt > 0 ? ' · 취약 가구 ' + c.vulnHhCnt : '') + (c.lastVisitAt ? ' · ' + esc(c.lastVisitAt) + ' 부재' : '') + '</small></span>'
+          + '<span class="chips">' + chips + '</span>'
+          + '<span class="sc">' + c.score + '점</span>'
+          + '<span class="dm">' + (i === 0 ? '기준' : (c.distM / 1000).toFixed(1) + 'km') + '</span></li>';
+      }).join('');
+      return '<section class="rec-bundle" data-i="' + bi + '"><div class="rec-bh"><b>' + b.no + '일차' + (bi === 0 ? ' · 오늘 추천' : '') + '</b>'
+        + '<span>' + esc(b.area || '') + ' 일대 ' + b.items.length + '곳 · 직선 ' + b.km.toFixed(1) + 'km</span>'
+        + '<button type="button" class="btn ' + (bi === 0 ? 'btn-primary' : 'btn-line') + ' btn-sm rec-add">이 묶음 담기</button></div><ol>' + rows + '</ol></section>';
+    }).join('');
+    $('#recBody').html(head + html).data('rec', r);
+  }
+  $('#btnRecommend').on('click', openRec);
+  $('#recClose').on('click', function () { $('#recBg').removeClass('open'); });
+  $('#recBg').on('click', function (e) { if (e.target === this) $(this).removeClass('open'); });
+  $(document).on('keydown', function (e) { if (e.key === 'Escape') $('#recBg').removeClass('open'); });
+  $('#recBody').on('click', '.rec-add', function () {
+    var r = $('#recBody').data('rec'), b = r.bundles[Number($(this).closest('.rec-bundle').data('i'))];
+    var before = items.length, blocked = 0;
+    b.items.forEach(function (c) { if (!addCand(c)) blocked++; });
+    $('#recBg').removeClass('open');
+    if (blocked) Common.toast('구가 다른 건물 ' + blocked + '곳은 담지 않았습니다.');
+    if (items.length === before) { render(); return; }
+    if (items.filter(function (it) { return !it.checked; }).length >= 2) optimize(); else render();
+  });
   $start.on('change', render);
   $('#onlyMine').on('change', drawMap);
   if (live()) naver.maps.Event.addListener(map, 'dragstart', function () { if (pop) { pop.remove(); pop = null; } });

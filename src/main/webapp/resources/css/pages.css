@@ -706,3 +706,33 @@ body.ml-lock, body.ml-lock .page-scroll { overflow: hidden; }   /* 모달이 떠
 .rb-tbl th, .rb-tbl td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
 .rb-tbl th { background: var(--bg-card); color: var(--text-2); font-weight: 500; }
 .ml-sec h4 small { font-weight: 400; }
+
+/* 하루치 방문 추천 창 (fieldedit.jsp #recBg, 틀 = common.css .du-modal) */
+.rec-modal { width: min(860px, calc(100vw - 32px)); }
+.rec-sum { margin-bottom: 14px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.rec-sum b { color: var(--text); }
+.rec-bundle { margin-bottom: 14px; border: 1px solid var(--line); background: var(--bg-card); }
+.rec-bundle:first-of-type { border-color: var(--primary); }
+.rec-bh { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
+.rec-bh b { font-size: 14px; white-space: nowrap; }
+.rec-bh span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-2); }
+.rec-bundle ol { list-style: none; margin: 0; padding: 4px 0; }
+.rec-item { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 48px 44px; align-items: center; gap: 8px; padding: 7px 14px; font-size: 13px; }
+.rec-item.seed { background: var(--line-soft); }
+.rec-item .rk { font-size: 11px; color: var(--text-3); text-align: right; }
+.rec-item .rk::before { content: '#'; }
+.rec-item .ti { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-item .ti small { display: block; font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.rec-item .chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.rec-item .sc { font-weight: 700; text-align: right; }
+.rec-item .dm { font-size: 12px; color: var(--text-2); text-align: right; }
+.r-chip { padding: 1px 6px; border: 1px solid var(--line); font-size: 11px; color: var(--text-2); white-space: nowrap; }
+.r-chip.r-seed { border-color: var(--primary); color: var(--primary); }
+.r-chip.r-absent { border-color: var(--danger); color: var(--danger); }
+.r-chip.r-high { border-color: var(--warn, #e0a030); color: var(--warn, #e0a030); }
+@media (max-width: 640px) {
+  .rec-bh { flex-wrap: wrap; }
+  .rec-item { grid-template-columns: 28px minmax(0, 1fr) 44px; }
+  .rec-item .chips { grid-column: 2 / 4; justify-content: flex-start; }
+  .rec-item .dm { display: none; }
+}

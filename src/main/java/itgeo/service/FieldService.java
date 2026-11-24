@@ -2,7 +2,9 @@ package itgeo.service;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,8 @@ import itgeo.to.ArchiveRowTO;
 import itgeo.to.FieldCheckTO;
 import itgeo.to.FieldItemTO;
 import itgeo.to.FieldListTO;
+import itgeo.to.VisitBundleTO;
+import itgeo.to.VisitCandTO;
 
 /**
  * 현장확인 리스트. FieldDAO 는 여기서만.
@@ -180,6 +184,45 @@ public class FieldService {
 		String m = moveModeOf(moveMode);
 		if (m == null || dao.getField(surveyId, userId, userGu) == null) return false;
 		return dao.updateMoveMode(surveyId, userId, m) > 0;
+	}
+
+	/**
+	 * 하루치 방문 묶음 추천 : 보관함(활성 저장 목록)의 해당 구 건물을 VisitBundler 로 묶는다.
+	 *  제외 = 이미 다른 리스트에 잡혀 아직 결과가 없는 건물 · 최근 방문 결과가 만남/거절/기타 · 좌표 없음 · 지금 편집 중인 리스트에 담긴 건물
+	 *  최근 방문 결과가 부재면 우선, 기록이 없으면 일반 후보.
+	 * 반환 {gu, guName, total, used, excluded{scheduled, visited, noCoord, inList}, perDay, bundles}
+	 */
+	public Map<String, Object> recommend(long userId, String userGu, String gu, int perDay, Set<String> exceptBldIds) {
+		String g = userGu != null && !userGu.isBlank() ? userGu : gu;
+		if (!"11530".equals(g) && !"11470".equals(g) && !"11560".equals(g))
+			throw new IllegalArgumentException("추천할 구를 골라 주세요.");
+		int cap = Math.max(1, Math.min(10, perDay <= 0 ? VisitBundler.DEFAULT_PER_DAY : perDay));
+		List<VisitCandTO> all = dao.getVisitCandList(userId, g);
+		List<VisitCandTO> ok = new ArrayList<>();
+		int scheduled = 0, visited = 0, noCoord = 0, inList = 0;
+		for (VisitCandTO c : all) {
+			String r = c.getLastResult();
+			if (exceptBldIds != null && exceptBldIds.contains(c.getBldId())) inList++;
+			else if (c.isPending()) scheduled++;
+			else if (r != null && !"ABSENT".equals(r)) visited++;
+			else if (c.getLat() == null || c.getLng() == null) noCoord++;
+			else ok.add(c);
+		}
+		Map<String, Object> ex = new LinkedHashMap<>();
+		ex.put("scheduled", scheduled);
+		ex.put("visited", visited);
+		ex.put("noCoord", noCoord);
+		ex.put("inList", inList);
+		List<VisitBundleTO> bundles = VisitBundler.bundle(ok, cap);
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("gu", g);
+		out.put("guName", ArchiveService.guName(g));
+		out.put("total", all.size());
+		out.put("used", ok.size());
+		out.put("excluded", ex);
+		out.put("perDay", cap);
+		out.put("bundles", bundles);
+		return out;
 	}
 
 	/**

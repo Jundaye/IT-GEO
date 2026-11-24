@@ -1,6 +1,8 @@
 package itgeo.controller;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +78,26 @@ public class FieldRESTController {
 	public Map<String, Object> scheduleDelete(@RequestParam("scheduleId") long scheduleId, HttpSession session) {
 		MemberTO m = (MemberTO) session.getAttribute("loginMember");
 		return result(() -> scheduleService.delete(m.getUserId(), scheduleId));
+	}
+
+	// GET api/field/recommend.do?gu&perDay&exceptBldIds=.. : 하루치 방문 묶음 추천 (보관함 안에서, K-means + 우선순위)
+	//  exceptBldIds = 지금 편집 중인 리스트에 이미 담긴 건물. 실패하면 {ok:false, msg}
+	@GetMapping(value = "api/field/recommend.do", produces = "application/json;charset=UTF-8")
+	public Map<String, Object> recommend(@RequestParam(value = "gu", required = false) String gu,
+			@RequestParam(value = "perDay", defaultValue = "6") int perDay,
+			@RequestParam(value = "exceptBldIds", required = false) String[] exceptBldIds, HttpSession session) {
+		MemberTO m = (MemberTO) session.getAttribute("loginMember");
+		try {
+			Map<String, Object> out = fieldService.recommend(m.getUserId(), m.isGuUser() ? m.getSggCd() : null, gu, perDay,
+					exceptBldIds == null ? null : new HashSet<>(Arrays.asList(exceptBldIds)));
+			out.put("ok", true);
+			return out;
+		} catch (IllegalArgumentException e) {
+			Map<String, Object> out = new HashMap<>();
+			out.put("ok", false);
+			out.put("msg", e.getMessage());
+			return out;
+		}
 	}
 
 	// 달력 저장 응답 : 성공 {ok:true}, 막힘 {ok:false, msg:"이유"}

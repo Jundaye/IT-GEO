@@ -12,6 +12,7 @@ import itgeo.to.ArchiveRowTO;
 import itgeo.to.FieldCheckTO;
 import itgeo.to.FieldItemTO;
 import itgeo.to.FieldListTO;
+import itgeo.to.VisitCandTO;
 
 // FieldService 에서만 부른다. 메서드명 = mapper-field.xml 의 id (테이블은 survey_list / survey_plan / visit_history / survey_record)
 @Component
@@ -106,5 +107,12 @@ public class FieldDAO {
 		Map<String, Object> p = new HashMap<>();
 		p.put("userId", userId); p.put("gu", gu);
 		return session.selectList("mapper-field.getPickList", p);
+	}
+
+	// 하루치 방문 묶음 추천 후보 (내 보관함, 한 구)
+	public List<VisitCandTO> getVisitCandList(long userId, String gu) {
+		Map<String, Object> p = new HashMap<>();
+		p.put("userId", userId); p.put("gu", gu);
+		return session.selectList("mapper-field.getVisitCandList", p);
 	}
 }

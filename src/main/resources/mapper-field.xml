@@ -162,4 +162,32 @@
 		 ORDER BY f.vulnerability_score DESC, vuln_hh_cnt DESC, priority_sum DESC, f.bld_id
 	</select>
 
+	<!-- 하루치 방문 묶음 추천 후보 : 내 보관함 건물(같은 건물은 가장 최근 저장 1건) + 최근 방문 결과 + 일정 여부. gu 필수 (한 리스트 = 한 구)
+	     last_result = 이 건물의 가장 최근 방문 (담당자 구분 없이, 같은 시각이면 visit_id 큰 것)
+	     pending     = 내 현장확인 리스트에 담겨 있고 아직 확인 기록이 없는 건물 (이미 일정이 잡힘 → 추천에서 뺀다) -->
+	<select id="getVisitCandList" resultType="itgeo.to.VisitCandTO">
+		SELECT f.factor_id, f.bld_id, b.sgg_cd, b.emd_nm, b.addr, b.bld_nm, b.use_nm, b.lat, b.lng
+		     , CAST(f.vulnerability_score AS SIGNED) score
+		     , IFNULL(rs.vuln_hh_cnt, 0) vuln_hh_cnt, IFNULL(rs.priority_sum, 0) priority_sum
+		     , CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL)) factor_text
+		     , lv.result last_result
+		     , DATE_FORMAT(lv.visited_at, '%Y-%m-%d') last_visit_at
+		     , EXISTS (SELECT 1 FROM survey_plan sp
+		                 JOIN survey_list sl ON sl.survey_id = sp.survey_id AND sl.user_id = #{userId}
+		                 JOIN vulnerability_factor f3 ON f3.factor_id = sp.factor_id
+		                WHERE f3.bld_id = f.bld_id
+		                  AND NOT EXISTS (SELECT 1 FROM survey_record r WHERE r.plan_id = sp.plan_id)) pending
+		  FROM vulnerability_factor f
+		  JOIN vulnerability_list l ON l.vulnerability_id = f.vulnerability_id
+		  JOIN building b ON b.bld_id = f.bld_id
+		  LEFT JOIN bld_resident_stat rs ON rs.bld_id = b.bld_id
+		  LEFT JOIN visit_history lv ON lv.visit_id = (SELECT v.visit_id FROM visit_history v WHERE v.bld_id = f.bld_id
+		                                               ORDER BY v.visited_at DESC, v.visit_id DESC LIMIT 1)
+		 WHERE l.user_id = #{userId} AND l.is_active = 1 AND b.sgg_cd = #{gu}
+		   AND f.factor_id = (SELECT f2.factor_id FROM vulnerability_factor f2
+		                       JOIN vulnerability_list l2 ON l2.vulnerability_id = f2.vulnerability_id
+		                      WHERE l2.user_id = #{userId} AND l2.is_active = 1 AND f2.bld_id = f.bld_id
+		                      ORDER BY f2.evaluated_at DESC, f2.factor_id DESC LIMIT 1)
+	</select>
+
 </mapper>
