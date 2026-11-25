@@ -44,7 +44,13 @@ public class BuildingTO {
 	private Integer ugrndUnits;  // 지하층 전유 호 수 (공동주택만). 점수는 ugrnd_res 기준 그대로
 
 	// 계산 컬럼
-	private int score;          // 취약 점수 (100점 만점)
+	private double score;       // 취약 점수 (100점 만점). legacy 는 정수값, 모델 B 는 소수 둘째 자리
+	private Double rawScore;       // 모델 B : 계산 점수 (소수 둘째 자리). 이때 score 는 환산 점수(소수 유지)
+	private Integer displayScore;  // 모델 B : 화면 표시 = 환산 점수 버림 정수. legacy 면 null (score 그대로 표시)
+	private Boolean scoreTarget;   // 모델 B : 점수 대상(units > 0) 여부. false 면 점수 없음 ("점수 대상 아님")
+	private Boolean candidate;     // 모델 B : 우선확인 후보 (계산 점수 ≥ 경계 = 환산 80 이상)
+	@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) private String coldCheck;      // 한파 시나리오 (2026-11-24) : Y = 한파 현장확인 대상 (기본 B 후보 · 사용승인 연도 <= 1979), U = 후보인데 사용승인일 없음(확인 불가), null = 해당 없음 · 한파 아님
+	private Double scoreH, scoreO, scoreR, scoreA;   // 모델 B 영역 값 0~1 (거처 · 건물 상태 · 지형·재해 · 접근성). legacy 면 null, 연수 모르면 scoreO null
 	private int ptUgrnd, ptGosiwon, ptRooftop, ptViol, ptOld, ptFlood, ptLow, ptCheap;  // 요인별 점수
 	private Integer bldAge;     // 사용승인 후 경과 년수 (없으면 null)
 	private int vulnHhCnt;      // 취약 가구 수 (bld_resident_stat, 동점 2순위)

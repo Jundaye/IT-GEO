@@ -16,6 +16,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 		Object loginMember = session.getAttribute("loginMember");
 		System.out.println("session loginMember=" + loginMember);
 		if(loginMember != null) {
+			request.setAttribute("scoreModelB", itgeo.to.AnalysisCriteriaTO.modelBConfig());   // JSP 공통 : 점수 모델 B 면 true (저장 점수 산식 표시 등)
 			return true;
 		}
 		// JSON API(api/...do, 모바일 앱 포함)는 로그인 화면으로 보내지 않고 401 + {ok:false}

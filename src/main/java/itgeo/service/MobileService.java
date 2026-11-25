@@ -179,6 +179,13 @@ public class MobileService {
 	static List<String> factorsOf(BuildingTO b) {
 		List<String> out = new ArrayList<>();
 		if (b == null) return out;
+		if (b.getRawScore() != null || b.getScoreH() != null) {   // 모델 B : 값이 0 보다 큰 영역 이름
+			if (b.getScoreH() != null && b.getScoreH() > 0) out.add("거처 특성");
+			if (b.getScoreO() != null && b.getScoreO() > 0) out.add("건물 상태");
+			if (b.getScoreR() != null && b.getScoreR() > 0) out.add("지형·재해");
+			if (b.getScoreA() != null && b.getScoreA() > 0) out.add("생활시설 접근성");
+			return out;
+		}
 		int[] pts = { b.getPtUgrnd(), b.getPtGosiwon(), b.getPtRooftop(), b.getPtViol(), b.getPtOld(), b.getPtFlood(), b.getPtLow(), b.getPtCheap() };
 		String[] keys = { "ugrnd", "gosiwon", "rooftop", "viol", "old", "flood", "low", "cheap" };
 		for (int i = 0; i < keys.length; i++) if (pts[i] > 0) out.add(ArchiveService.FACTOR_LABELS.get(keys[i]));

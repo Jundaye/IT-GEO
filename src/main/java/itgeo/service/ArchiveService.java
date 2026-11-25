@@ -25,6 +25,7 @@ import itgeo.to.ArchiveDetailTO;
 import itgeo.to.ArchiveRowTO;
 import itgeo.to.ArchiveTO;
 import itgeo.to.BuildingDetailTO;
+import itgeo.to.BuildingTO;
 import itgeo.to.DashboardTO;
 import itgeo.to.FieldCheckTO;
 import itgeo.to.MemberTO;
@@ -54,6 +55,11 @@ public class ArchiveService {
 		FACTOR_LABELS.put("flood", "침수");
 		FACTOR_LABELS.put("low", "저지대");
 		FACTOR_LABELS.put("cheap", "저가");
+		// 점수 모델 B 영역 (05 현장 체크 · 모바일 사전 탐지 요인 키 = 상세 점수 항목 key)
+		FACTOR_LABELS.put("H", "거처 특성");
+		FACTOR_LABELS.put("O", "건물 상태");
+		FACTOR_LABELS.put("R", "지형·재해");
+		FACTOR_LABELS.put("A", "생활시설 접근성");
 	}
 	/** 부서로 넘기기 : 넘길 부서 · 요청 종류 (transfer_log.dept_nm / req_type) */
 	public static final List<String> DEPTS = Arrays.asList("주택과", "건축과", "복지정책과", "사회복지과", "안전총괄과");
@@ -108,7 +114,18 @@ public class ArchiveService {
 		String sggCd = bd.getBuilding().getSggCd();
 		if (member.isGuUser() && !member.getSggCd().equals(sggCd))
 			throw new ForbiddenException(member.getGuName() + " 건물만 보관함에 저장할 수 있습니다.");
-		int saveScore = score == null ? bd.getBuilding().getScore() : score;
+		BuildingTO sb = bd.getBuilding();
+		int saveScore;
+		if (c.isModelB()) {
+			// 모델 B : 서버가 계산한 환산 점수의 화면 표시값(버림 정수)으로 저장 (화면이 보낸 값은 쓰지 않는다). 버림 정수 ≥ 80 ⇔ 우선확인 후보.
+			// 산식 · 가중치 · 환산 기준은 리스트 criteria JSON 에 영구히 남겨 기존 점수와 구분한다 (DB 구조 변경 없음)
+			if (Boolean.FALSE.equals(sb.getScoreTarget()) || sb.getDisplayScore() == null)
+				throw new IllegalArgumentException("분석 대상이 아닌 건물(세대수 없음)은 모델 B 점수로 저장할 수 없습니다.");
+			saveScore = sb.getDisplayScore();
+			criteriaJson = criteriaB(criteriaJson, c, sb);
+		} else {
+			saveScore = score != null ? score : (int) Math.round(sb.getScore());
+		}
 
 		Map<String, Object> out = new LinkedHashMap<>();
 		out.put("bldId", bldId);
@@ -118,7 +135,8 @@ public class ArchiveService {
 		if (archived && !visited) {
 			out.put("ok", false);
 			out.put("code", "DUP");
-			out.put("msg", "이미 보관함에 저장된 건물입니다 (" + prev.getEvaluatedAt() + " 저장 · " + prev.getVulnerabilityScore() + "점)");
+			out.put("msg", "이미 보관함에 저장된 건물입니다 (" + prev.getEvaluatedAt() + " 저장 · " + prev.getVulnerabilityScore() + "점"
+					+ ("b".equals(prev.getScoreModel()) ? " · 모델 B 환산" : c.isModelB() ? " · 산식 정보 없는 기존 점수" : "") + ")");
 			out.put("savedAt", prev.getEvaluatedAt());              // 안내 모달(map-panel.js)에 따로 보여 준다
 			out.put("savedScore", prev.getVulnerabilityScore());
 			return out;
@@ -137,13 +155,44 @@ public class ArchiveService {
 		}
 		to.setBldId(bldId);
 		to.setVulnerabilityScore(saveScore);
-		to.setVulnerabilityGrade(grade(saveScore));
+		to.setVulnerabilityGrade(c.isModelB() ? gradeB(saveScore) : grade(saveScore));
 		dao.addFactor(to);
 
 		out.put("ok", true);
 		out.put("code", archived ? "UPDATED" : "ADDED");
 		out.put("msg", archived ? "점수를 갱신해 다시 저장했습니다." : "보관함에 저장했습니다.");
 		return out;
+	}
+
+	/** 모델 B 저장용 기준 JSON : 화면이 보낸 JSON 에 산식(model) · 영역 가중치 · 환산 기준(경계 · 최고)을 서버 값으로 덮어 쓴다 */
+	static String criteriaB(String json, AnalysisCriteriaTO c, BuildingTO b) {
+		com.fasterxml.jackson.databind.node.ObjectNode n;
+		try {
+			com.fasterxml.jackson.databind.JsonNode j = json == null || json.isBlank() ? null : JSON.readTree(json);
+			n = j != null && j.isObject() ? (com.fasterxml.jackson.databind.node.ObjectNode) j : JSON.createObjectNode();
+		} catch (Exception e) {
+			n = JSON.createObjectNode();
+		}
+		n.put("model", "b");
+		// 기상 시나리오 (2026-11-24) : 점수 계산 기준을 서버 값으로 남긴다. 폭우 점수는 기본 B 와 다른 산식 · 다른 환산 기준이라 섞이지 않게 (보관함 구분 칸 = scenario)
+		//  scenario = base | rain | cold (폭염 · 모르는 값은 base), scoreBasis = "B 기본" | "B 폭우" | "B 기본 + 한파 현장확인 표시". 한파 보기 전환(coldOnly)은 보기일 뿐이라 남기지 않는다
+		n.put("scenario", c.getScenarioB());
+		n.put("scoreBasis", c.getScoreBasis());
+		n.remove("coldOnly");
+		if (c.isScenRain()) n.put("areaR", "F");   // 세 번째 영역 = 침수 기록 F (weightR 칸에 F 가중치)
+		if (c.isScenCold()) n.put("coldYearMax", AnalysisCriteriaTO.COLD_YEAR_MAX);
+		n.put("weightH", c.getWeightH()); n.put("weightO", c.getWeightO()); n.put("weightR", c.getWeightR()); n.put("weightA", c.getWeightA());
+		// 4차 : 입력값(0~100)과 실제 적용 비율(%)을 구분해 남긴다
+		com.fasterxml.jackson.databind.node.ObjectNode share = n.putObject("weightShare");
+		for (String k : new String[] { "H", "O", "R", "A" }) share.put(k, Math.round(c.getWeightShare(k) * 100) / 100.0);
+		if (c.getScaleBoundary() != null) n.put("scaleBoundary", c.getScaleBoundary());
+		if (c.getScaleMax() != null) n.put("scaleMax", c.getScaleMax());
+		return n.toString();
+	}
+
+	/** 모델 B 저장 등급 (환산 점수 기준, "위험" 이라고 쓰지 않는다) */
+	static String gradeB(int display) {
+		return display >= 80 ? "우선확인 후보" : display >= 60 ? "환산 60~79점" : display >= 40 ? "환산 40~59점" : "환산 40점 미만";
 	}
 
 	/** 화면이 보낸 기준 JSON → AnalysisCriteriaTO (모르는 키는 무시, 비었거나 깨진 JSON 은 기본값) */
@@ -166,6 +215,18 @@ public class ArchiveService {
 		if (member.isGuUser() && !member.getSggCd().equals(sgg)) throw new ForbiddenException("관할 구역의 건물만 볼 수 있습니다.");
 		return sgg;
 	}
+
+	/** [상세 필터] 모델 B 영역 키 (mapper 에서 열 이름 t.score_<키> 로 쓴다) */
+	public static final List<String> FILTER_AREAS_B = Arrays.asList("h", "o", "r", "a");
+	public static final Map<String, String> FILTER_AREA_LABELS_B = new LinkedHashMap<>();
+	static {
+		FILTER_AREA_LABELS_B.put("h", "거처 특성");
+		FILTER_AREA_LABELS_B.put("o", "건물 상태");
+		FILTER_AREA_LABELS_B.put("r", "지형·재해");
+		FILTER_AREA_LABELS_B.put("a", "생활시설 접근성");
+	}
+	/** 지금 모델의 [상세 필터] 요인 선택지 */
+	public static Map<String, String> filterFactorLabels() { return AnalysisCriteriaTO.modelBConfig() ? FILTER_AREA_LABELS_B : FILTER_FACTOR_LABELS; }
 
 	/** [상세 필터] 취약 요인 키 허용 목록 (mapper 에서 열 이름 t.pt_<키> 로 쓰므로 여기서 거른다) */
 	public static final List<String> FILTER_FACTORS = Arrays.asList("ugrnd", "rooftop", "gosiwon", "viol", "old", "flood", "low");
@@ -190,7 +251,7 @@ public class ArchiveService {
 		if (c.getSize() <= 0 || c.getSize() > 100) c.setSize(20);
 		if (c.getFactors() != null) {
 			List<String> ok = new ArrayList<>();
-			for (String k : c.getFactors()) if (FILTER_FACTORS.contains(k)) ok.add(k);
+			for (String k : c.getFactors()) if ((c.isModelB() ? FILTER_AREAS_B : FILTER_FACTORS).contains(k)) ok.add(k);
 			c.setFactors(ok);
 		}
 		if (c.getBands() != null) {
@@ -205,6 +266,8 @@ public class ArchiveService {
 		}
 		if (c.getSavedFrom() != null && !c.getSavedFrom().matches("\\d{4}-\\d{2}-\\d{2}")) c.setSavedFrom(null);
 		if (c.getSavedTo() != null && !c.getSavedTo().matches("\\d{4}-\\d{2}-\\d{2}")) c.setSavedTo(null);
+		c.setArchiveScope(true);                // 저장한 건물은 분석 대상이 아니어도 목록에 (모델 B)
+		mapService.prepareScale(c);
 		int total = dao.getArchiveTotal(c);
 		List<ArchiveRowTO> list = dao.getArchiveList(c);
 		return new PageTO<>(c.getPage(), c.getSize(), total, list);

@@ -22,6 +22,8 @@
   <%-- 점수 구성 (2차 K) : 묶음 줄을 누르면 요인별 표가 펼쳐진다. 그리기는 map-panel.js scoreRow --%>
   <h4>점수 구성 <span class="sc-total" id="dScoreTotal"></span></h4>
   <div class="sc-list" id="dScoreItems"></div>
+  <%-- 기상 시나리오 안내 (2026-11-24, 모델 B) : 폭우 = 침수 기록 · 지하층 보유, 한파 = 사용승인 연도와 현장확인 사유. map-panel.js renderScen --%>
+  <div class="d-scen-note" id="dScenNote" hidden></div>
 
   <h4>건물 정보 (건축물대장)</h4>
   <table class="d-info"><tbody id="dInfo"></tbody></table>

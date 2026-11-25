@@ -41,6 +41,11 @@ public class BuildingDAO {
 	}
 
 	// 격자 묶음 (bbox + cell)
+	// 모델 B 환산 기준 : 3개 구 점수 대상 전체에서 계산 점수 상위 300개 (높은 순)
+	public List<Double> getScoreTopB(AnalysisCriteriaTO c) {
+		return session.selectList("mapper-building.getScoreTopB", c);
+	}
+
 	public List<ClusterTO> getClusterList(AnalysisCriteriaTO c) {
 		return session.selectList("mapper-building.getClusterList", c);
 	}
@@ -56,6 +61,10 @@ public class BuildingDAO {
 
 	public int getResultCount(AnalysisCriteriaTO c) {
 		return session.selectOne("mapper-building.getResultCount", c);
+	}
+
+	public java.util.Map<String, Object> getResultCountB(AnalysisCriteriaTO c) {
+		return session.selectOne("mapper-building.getResultCountB", c);
 	}
 
 	public List<BuildingTO> getResultList(AnalysisCriteriaTO c) {

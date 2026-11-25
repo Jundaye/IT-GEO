@@ -55,4 +55,6 @@ public class FieldItemTO {
 			return addr.replaceFirst("^서울특별시\\s+", "").replaceFirst("^\\S+구\\s+", "");
 		}
 	}
+	// 저장 점수의 산식 : "b" = 점수 모델 B 환산 점수로 저장 (보관함 리스트 criteria JSON 의 model). null = 산식 정보 없이 저장된 기존 점수
+	private String scoreModel;
 }

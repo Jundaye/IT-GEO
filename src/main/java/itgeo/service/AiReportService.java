@@ -26,6 +26,7 @@ import itgeo.dao.AiReportDAO;
 import itgeo.report.HwpxReportWriter;
 import itgeo.report.PdfReportWriter;
 import itgeo.to.AiReportTO;
+import itgeo.to.AnalysisCriteriaTO;
 import itgeo.to.ArchiveDetailTO;
 import itgeo.to.BuildingTO;
 import itgeo.to.MemberTO;
@@ -108,7 +109,7 @@ public class AiReportService {
 		rp.getFacts().add(new String[] { "대상 시설", place });
 		rp.getFacts().add(new String[] { "주소", nvl(b.getAddr()) });
 		rp.getFacts().add(new String[] { "용도 · 규모", nvl(b.getUseNm(), "용도 미상") + floors(b) });
-		rp.getFacts().add(new String[] { "취약도", d.getSavedScore() + "점 → 현장 확인 보정 " + d.getAdjustedScore() + "점 (" + d.getAdjText() + ")" });
+		rp.getFacts().add(new String[] { "취약도", d.getSavedScore() + "점 → 현장 확인 보정 " + d.getAdjustedScore() + "점 (" + d.getAdjText() + ")" + scoreSource(d) });
 		rp.getFacts().add(new String[] { "사전 탐지 요인", blank(d.getDetectedText()) ? "없음" : d.getDetectedText() });
 		rp.getFacts().add(new String[] { "조사 기간", from.format(DOT) + " ~ " + to.format(DOT) + " (현장조사이력 " + recs.size() + "건)" });
 		rp.getFacts().add(new String[] { "모바일 앱 연동", appCnt == 0 ? "앱에서 저장한 기록 없음" : "현장조사이력 중 모바일 앱 기록 " + appCnt + "건" });
@@ -236,6 +237,7 @@ public class AiReportService {
 				"- 입력에 없는 사실을 지어내지 않는다. 기록끼리 다르면 날짜를 밝혀 변화로 적는다. 추정은 '~로 보임'으로 구분한다.",
 				"- 사람 이름, 연락처, 주민등록번호 등 개인을 특정할 수 있는 정보는 쓰지 않는다. 담당자는 '담당자', 거주자는 '거주자'로 적는다.",
 				"- 항목별 취약점수는 1(양호) ~ 5(위험)이며 4점 이상은 주의 항목이다.",
+				"- 취약도 점수는 우선 확인할 건물을 고르기 위한 상대 점수다. '위험 건물', '위험 확률'로 단정하지 말고 '우선확인 후보', '환산 점수'처럼 입력에 적힌 의미 그대로 쓴다.",
 				"- 아래 키를 가진 JSON 객체 하나만 출력한다. 값은 모두 문자열이다. 설명 문장이나 코드 블록 표시는 넣지 않는다.",
 				"{",
 				keys.toString().replaceAll(",\n$", ""),
@@ -248,7 +250,7 @@ public class AiReportService {
 		u.append("[대상 시설] ").append(place).append(" / ").append(nvl(b.getAddr())).append('\n');
 		u.append("[용도 · 규모] ").append(nvl(b.getUseNm(), "용도 미상")).append(floors(b))
 				.append(blank(b.getUseaprDay()) || b.getUseaprDay().length() < 4 ? "" : " / 사용승인 " + b.getUseaprDay().substring(0, 4) + "년").append('\n');
-		u.append("[취약도] 저장 ").append(d.getSavedScore()).append("점, 현장 확인 보정 후 ").append(d.getAdjustedScore()).append("점\n");
+		u.append("[취약도] 저장 ").append(d.getSavedScore()).append("점, 현장 확인 보정 후 ").append(d.getAdjustedScore()).append("점").append(scoreSource(d)).append("\n");
 		u.append("[사전 탐지 요인] ").append(blank(d.getDetectedText()) ? "없음" : d.getDetectedText()).append('\n');
 		u.append("\n[현장조사이력] 오래된 순, 총 ").append(recs.size()).append("건\n");
 		int budget = 40_000;      // 프롬프트가 너무 길어지지 않게 (녹취록부터 줄인다)
@@ -286,6 +288,15 @@ public class AiReportService {
 			for (MemoTO m : d.getMemos()) u.append("- ").append(m.getCreatedAt()).append(' ').append(m.getMemo()).append('\n');
 		}
 		return u.toString();
+	}
+
+	/** 점수의 출처 · 의미 (보고서 · LLM 프롬프트 공통). 보관함 점수가 모델 B 로 저장됐으면 환산 점수, 표시가 없으면 산식 정보 없는 기존 점수 */
+	static String scoreSource(ArchiveDetailTO d) {
+		if (d.getFactor() != null) {
+			if ("b".equals(d.getFactor().getScoreModel())) return " · 보관함 저장 당시 점수 모델 B 환산 점수 (80점 이상 = 3개 구 우선확인 후보)";
+			return AnalysisCriteriaTO.modelBConfig() ? " · 산식 정보 없이 저장된 기존 점수 (지금 화면의 환산 점수와 다른 기준일 수 있음)" : "";
+		}
+		return AnalysisCriteriaTO.modelBConfig() ? " · 보관함 미저장, 현재 점수 모델 B 환산 점수" : "";
 	}
 
 	/** LLM 응답(JSON) → 본문 칸. JSON 이 아니면 전체를 "종합 의견" 한 칸으로 */

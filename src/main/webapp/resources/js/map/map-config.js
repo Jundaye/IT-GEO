@@ -111,3 +111,76 @@ window.MAP_CONFIG = {
   /* 지도 위 체크박스 "80점 이상만 보기" 기본값 (살피구로 riskOnly) */
   RISK_ONLY: true
 };
+
+/* 점수 모델 (app.properties app.analysis.model, map.jsp 가 APP_MODEL 로 넘김). 모델 B 면 :
+ *  - 서버 응답의 score = 환산 점수(소수 유지, 색 · 필터 · 정렬에 사용), displayScore = 화면 표시용 버림 정수, rawScore = 계산 점수
+ *  - 가중치 = 영역 4개 (거처 특성 · 건물 상태 · 지형·재해 · 생활시설 접근성), 영역마다 0~100 따로, 점수에는 비율로 (4차, map-layer.js)
+ *  - 조건별 조회 (B_FILTERS) : 점수 · 가중치와 따로인 보기 조건. 고른 조건을 모두 충족(AND)
+ *  - 시나리오 버튼(기본 · 폭우 · 폭염 · 한파)은 보이되, 폭우 · 폭염 · 한파는 "준비 중" (점수 · 가중치를 바꾸지 않는다). legacy 프리셋 값은 그대로 둔다 */
+(function (C) {
+  C.MODEL_B = window.APP_MODEL === 'b';
+  C.B_WEIGHTS = [
+    { key: 'H', label: '거처 특성', def: 100 }, { key: 'O', label: '건물 상태', def: 100 },
+    { key: 'R', label: '지형·재해', def: 100 }, { key: 'A', label: '생활시설 접근성', def: 100 }
+  ];
+  C.B_MIN = 0; C.B_MAX = 100; C.B_STEP = 5;
+  /* 모델 B 조건별 조회. key = map.jsp [data-bf], param = 서버 파라미터 (AnalysisCriteriaTO.filter*).
+     값이 있는 조건(rng)은 체크했을 때만 그 값을 보낸다. extra = 추가 조회 조건 (B 점수에 넣지 않는 legacy 요인) */
+  C.B_FILTERS = [
+    { key: 'ugrnd',   param: 'filterUgrnd' },
+    { key: 'lodging', param: 'filterLodging' },
+    { key: 'flood',   param: 'filterFloodMin', def: 3,  min: 1,  max: 5,  step: 1,  fmt: function (v) { return v + '개 연도 이상'; } },
+    { key: 'age',     param: 'filterAgeMin',   def: 30, min: 30, max: 60, step: 10, fmt: function (v) { return v + '년 이상'; } },
+    { key: 'slope',   param: 'filterSlopeMin', def: 15, min: 5,  max: 30, step: 1,  fmt: function (v) { return v + '° 초과'; } },
+    { key: 'viol',    param: 'filterViol', extra: true },
+    { key: 'low',     param: 'filterLowElev',  def: 15, min: 5,  max: 40, step: 1,  fmt: function (v) { return v + 'm 이하'; }, extra: true },
+    { key: 'cheap',   param: 'filterCheapPct', def: 20, min: 5,  max: 50, step: 5,  fmt: function (v) { return v + '% 이하'; }, extra: true }
+  ];
+  /* 시나리오 중 지금 B 에서 쓸 수 있는 것 (나머지는 준비 중). 2026-11-24 : 폭우(P3) · 한파(표시 방식) 반영, 폭염은 준비 중 */
+  C.B_SCEN_READY = ['base', 'rain', 'cold'];
+  /* 모델 B 기상 시나리오 (2026-11-24, reference/docs/weather_scenario_1124). 실제 계산은 서버(AnalysisCriteriaTO · mapper-building bRS · cold_check)가 하고 여기는 화면 표시용
+     weights = 고정 프리셋 (서버 RAIN_WEIGHTS · COLD_WEIGHTS 와 같은 숫자). 기본 모드 슬라이더 입력값은 덮지 않는다 (map-layer.js setScenB) */
+  C.B_SCEN = {
+    rain: { name: '폭우', weights: { H: 30, O: 20, R: 40, A: 10 }, rLabel: '침수 기록', rNote: '침수 기록 연도 수 (경사 제외)',
+            basis: '폭우 시나리오 기준 우선확인 점수', note: '폭우 시나리오 고정 기준 (H 30 · O 20 · F 40 · A 10). 지형·재해 대신 침수 기록 연도 수만 쓰고, 환산 기준(300번째 · 최고)도 폭우 점수로 따로 구합니다.' },
+    cold: { name: '한파', weights: { H: 25, O: 25, R: 25, A: 25 },
+            basis: '기본 B 점수 + 한파 현장확인 표시', note: '한파는 새 점수식이 없습니다. 기본 B(25 · 25 · 25 · 25) 우선확인 후보 중 ' + ((window.APP_COLD_YEAR || 1979) + 1) + '년 이전 사용승인 건물을 「한파 현장확인」으로 표시합니다.' }
+  };
+  /* 한파 현장확인 기준 연도 (서버 AnalysisCriteriaTO.COLD_YEAR_MAX 한 곳, map.jsp 가 APP_COLD_YEAR 로 넘김) */
+  C.COLD_YEAR_MAX = window.APP_COLD_YEAR || 1979;
+  /* 화면 표기 통일 (2026-11-24 확정) : "1980년 이전 사용승인 건물" = 사용승인일 1979-12-31 까지 포함, 1980-01-01 부터 제외 (COLD_YEAR_MAX = 1979) */
+  C.COLD_LABEL = (C.COLD_YEAR_MAX + 1) + '년 이전 사용승인 건물';
+  /* 선정 근거 = 운영상 확인 기준. "단열 기준이 전혀 없던 건물" · "한파에 취약하다고 확인된 건물" 로 단정하지 않는다 */
+  C.COLD_NOTE = C.COLD_LABEL + '로, 초기 건축물 단열 기준이 도입 · 강화되던 시기의 오래된 건물이라 단열 · 난방 상태를 추가로 확인하기 위한 운영상 기준입니다. 실제 단열 및 난방 상태는 현장에서 확인이 필요합니다.';
+  /* 지금 분석 기준 (map-main.js 가 분석할 때 넣음) : base | rain | cold, coldOnly = 한파 현장확인만 보기 */
+  C.scenNow = 'base'; C.coldOnlyNow = false;
+  /* 구 · 동 라벨 · 묶음 툴팁의 "N곳" 앞말 */
+  C.riskWord = function () {
+    if (!C.MODEL_B) return '위험';
+    if (C.scenNow === 'cold' && C.coldOnlyNow) return '한파 현장확인';
+    return C.scenNow === 'rain' ? '폭우 우선확인 후보' : '우선확인 후보';
+  };
+  /* 점수 앞말 : "환산" / "폭우 환산" */
+  C.scoreWord = function () { return !C.MODEL_B ? '' : C.scenNow === 'rain' ? '폭우 환산 ' : '환산 '; };
+  /* ⓘ 안내 (2026-11-25 문구 줄이기) : 화면에는 한 줄만, 긴 설명은 아이콘에 올리거나 누르면 뜬다. body = 이미 escape 한 HTML.
+     띄우기 · 위치는 map-main.js (body 에 붙는 떠 있는 상자 하나 → 패널 overflow 에 잘리지 않음) */
+  C.tip = function (body, label) {
+    if (!body) return '';
+    return '<span class="info-tip" tabindex="0" role="button" aria-label="' + (label || '설명 보기') + '">'
+      + '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.01"/></svg>'
+      + '<span class="tip-body">' + body + '</span></span>';
+  };
+  /* 화면에 보일 점수 숫자 (모델 B = 환산 점수 버림 정수, legacy = 점수 그대로) */
+  C.dispScore = function (b) { return b && b.displayScore != null ? b.displayScore : (b ? b.score : ''); };
+  /* "N점 이상" 대신 쓰는 이름 */
+  C.RISK_LABEL = C.MODEL_B ? '우선확인 후보(환산 ' + C.SCORE_MIN + '점 이상)' : C.SCORE_MIN + '점 이상';
+  if (C.MODEL_B) {
+    C.RISK_ONLY = true;      // 모델 B 조회 범위 기본값 (5차) : true = 우선확인 후보만(filterCand), false = 전체 분석 대상. 왼쪽 패널 · 지도 아래 [조회 범위] 두 칸이 같은 값
+    C.LEVELS = [
+      { min: 80, key: 'red',    label: '환산 80점 이상 · 우선확인 후보', rank: 4 },
+      { min: 60, key: 'orange', label: '환산 60~79점', rank: 3 },
+      { min: 40, key: 'yellow', label: '환산 40~59점', rank: 2 },
+      { min: 0,  key: 'green',  label: '환산 40점 미만', rank: 1 }
+    ];
+  }
+})(window.MAP_CONFIG);

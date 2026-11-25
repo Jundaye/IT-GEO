@@ -58,7 +58,7 @@ public class ArchiveController {
 		model.addAttribute("dongTree", mapService.getDongTree(c.getGu()));                      // 법정동 → 행정동
 		model.addAttribute("useList", archiveService.getArchiveUseList(member.getUserId(), c.getGu()));
 		model.addAttribute("filterQs", filterQs(req));                                           // 탭 · 페이지 링크가 필터를 유지
-		model.addAttribute("factorOpts", ArchiveService.FILTER_FACTOR_LABELS);
+		model.addAttribute("factorOpts", ArchiveService.filterFactorLabels());   // 모델 B = 영역 4개, legacy = 요인 7개
 		model.addAttribute("factorsSel", csv(c.getFactors()));                                   // ",ugrnd,flood," (JSP fn:contains 용)
 		model.addAttribute("bandsSel", csv(c.getBands()));
 		model.addAttribute("visitsSel", csv(c.getVisits()));

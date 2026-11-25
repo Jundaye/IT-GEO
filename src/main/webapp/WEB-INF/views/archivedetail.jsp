@@ -34,7 +34,7 @@
     <div class="ad-head-top">
       <div>
         <h1><c:out value="${title}"/>
-          <span class="badge blue">취약도 ${d.savedScore}</span>
+          <span class="badge blue">${d.factor.scoreModel == 'b' ? '환산 ' : '취약도 '}${d.savedScore}</span><c:if test="${not empty d.factor}"><c:choose><c:when test="${d.factor.scoreModel == 'b' and d.factor.rainBasis}"><small class="tag-model b rain" title="폭우 시나리오 기준 우선확인 점수(환산)로 저장. 기본 B 환산 점수와 산식 · 환산 기준이 다릅니다">B 폭우</small></c:when><c:when test="${d.factor.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)<c:if test="${not empty d.factor.scoreBasis}"> · <c:out value="${d.factor.scoreBasis}"/></c:if>">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose></c:if>
           <c:if test="${d.checkCnt > 0}"><span class="badge">현장 확인됨</span></c:if>
         </h1>
         <div class="sub"><c:out value="${b.addr}"/> · <c:out value="${empty b.useNm ? '용도 미상' : b.useNm}"/>
@@ -188,7 +188,7 @@
 
       <div class="card">
         <h3>분석 반영</h3>
-        <small class="muted">취약도</small>
+        <small class="muted">${d.factor.scoreModel == 'b' ? (d.factor.rainBasis ? '폭우 시나리오 기준 우선확인 점수 (모델 B 폭우 환산, 저장 당시)' : '환산 점수 (모델 B, 저장 당시)') : '취약도'}</small>
         <div class="ad-score"><b>${d.savedScore} → ${d.adjustedScore}</b><span class="badge ${d.scoreAdj == 0 ? '' : 'blue'}">${d.adjText} 현장 확인 보정</span></div>
         <ul class="ad-bullets">
           <c:if test="${not empty d.records}"><c:forEach var="f" items="${d.records[0].confirmed}"><li>· <c:out value="${f}"/> 요인 현장 확인으로 확정</li></c:forEach></c:if>

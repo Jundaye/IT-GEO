@@ -11,6 +11,34 @@ $(function () {
   var C = window.MAP_CONFIG;
   var $map = $('#map');
 
+  /* ⓘ 안내 (2026-11-25, MAP_CONFIG.tip) : 아이콘에 마우스를 올리거나 포커스하면 보이고, 누르면 고정(다시 누르거나 바깥을 누르면 닫힘).
+     body 에 붙은 상자 하나(#infoTipPop)에 .tip-body 내용을 화면 좌표로 띄운다 → 패널 · 목록의 overflow 에 잘리지 않는다 */
+  (function () {
+    var $pop = $('<div class="info-pop" id="infoTipPop" role="tooltip" hidden></div>').appendTo('body'), cur = null, pinned = false;
+    function place(el) {
+      var r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+      $pop.html($(el).children('.tip-body').html()).prop('hidden', false).css({ left: 0, top: 0 });
+      var w = $pop.outerWidth(), h = $pop.outerHeight();
+      var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8);
+      var top = r.bottom + 6;
+      if (top + h > vh - 8) top = Math.max(8, r.top - h - 6);
+      $pop.css({ left: left, top: top });
+    }
+    function show(el, pin) { cur = el; pinned = !!pin; place(el); }
+    function hide() { cur = null; pinned = false; $pop.prop('hidden', true); }
+    $(document)
+      .on('mouseenter focusin', '.info-tip', function () { if (!pinned) show(this); })
+      .on('mouseleave focusout', '.info-tip', function () { if (!pinned) hide(); })
+      .on('click', '.info-tip', function (e) { e.preventDefault(); e.stopPropagation(); if (pinned && cur === this) hide(); else show(this, true); })
+      .on('keydown', '.info-tip', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pinned && cur === this) hide(); else show(this, true); }
+        else if (e.key === 'Escape') hide();
+      })
+      .on('click', function (e) { if (pinned && !$(e.target).closest('#infoTipPop').length) hide(); });
+    window.addEventListener('scroll', function () { if (cur) hide(); }, true);   // 패널 · 목록 스크롤 (버블링 안 되므로 캡처)
+    $(window).on('resize', function () { if (cur) hide(); });
+  })();
+
   /* 지도 SDK 가 없거나 인증에 실패해도(키 · Web 서비스 URL 미등록) 결과 리스트 · 상세 패널은 동작하게 한다 */
   var hasMap = !!(window.naver && naver.maps && naver.maps.Map);
   if (!hasMap) {
@@ -92,8 +120,12 @@ $(function () {
     var area = [g ? g.name : '전체 3개 구', state.dong].concat(state.adms.map(admOfKey)).filter(Boolean).join(' · ');
     /* 앞머리 = 분석할 때의 기준 (2차 G) : "기준 폭우 · 범위 현재 화면" */
     var basis = state.scenRun ? '<span>기준</span> ' + Common.esc(scenName(state.scenRun) + (state.modRun ? '(수정됨)' : '')) + ' <span>·</span> ' : '';
-    if (byScreen()) $('#resultScope').html(basis + '<span>범위</span> 현재 화면 <span>· 지도를 옮기면 \'이 지역에서 재검색\'</span>');
-    else $('#resultScope').html(basis + '<span>범위</span> ' + Common.esc(area) + (state.q ? ' <span>· 검색은 화면 밖 건물도 찾습니다</span>' : ''));
+    if (C.MODEL_B && state.scenRun) basis = '<span>기준</span> ' + Common.esc(C.scenNow === 'rain' ? '폭우 시나리오 (고정 30·20·40·10)' : C.scenNow === 'cold' ? '한파 (기본 B + 현장확인 표시)' : '기본 B') + ' <span>·</span> ';
+    var scopeHtml = byScreen() ? basis + '<span>범위</span> 현재 화면 <span>· 지도를 옮기면 \'이 지역에서 재검색\'</span>'
+      : basis + '<span>범위</span> ' + Common.esc(area) + (state.q ? ' <span>· 검색은 화면 밖 건물도 찾습니다</span>' : '');
+    /* 모델 B (2026-11-25) : 목록 머리 첫 줄은 시나리오 · 건수만 (MapResult.setScope). 기준 · 범위 문구는 그 줄의 ⓘ 안으로 */
+    if (C.MODEL_B) MapResult.setScope(scopeHtml);
+    else $('#resultScope').html(scopeHtml);
     /* 법정동·행정동을 고르면 그 경계에 테두리 (행정동 여러 개면 전부). 구만 골랐거나 전체 구면 그리지 않는다 */
     if (!live()) return;                              // 지도가 없으면(인증 실패 등) 경계 · 색칠은 건너뛴다. 여기서 오류가 나면 뒤의 결과 리스트 조회까지 막힌다
     if (window.DongBoundary && (state.dong || state.adms.length)) DongBoundary.show(map, state.gu, state.dong, state.adms.map(admOfKey));
@@ -115,10 +147,16 @@ $(function () {
   /* 오른쪽 패널을 열고 검색 결과 화면으로 (2차 N). [분석 실행] 과 [이 지역에서 재검색] 이 같이 쓴다.
      건물 상세를 보던 중이면 상세(와 3D)는 닫는다. 패널을 열면 여닫기 버튼 방향 · 검색 줄 · 지도 유형 위치는 CSS 와 패널 class 감시(MutationObserver)가 같이 맞춘다 */
   function showResultPanel() {
-    if (window.Bld3D) Bld3D.hide();
-    $('#detailView').hide(); $('#resultView').removeClass('empty').show();
+    prepResultView();
     $('#panelRight').addClass('open');
   }
+  /* 패널을 열지 않고 결과 목록 화면만 준비 (모델 B : 첫 화면 자동 분석 · 시나리오 버튼 · 보기 전환은 패널 열림 상태를 그대로 둔다, 2026-11-25) */
+  function prepResultView() {
+    if (window.Bld3D) Bld3D.hide();
+    $('#detailView').hide(); $('#resultView').removeClass('empty').show();
+  }
+  /* 오른쪽 여닫기 버튼 옆 건수 표시 (모델 B). 누르면 패널을 열고 지금 목록 */
+  $('#rpCount').on('click', function () { showResultPanel(); });
   /* [이 지역에서 재검색] : 패널이 닫혀 있든 건물 상세를 보고 있든 항상 검색 결과 리스트를 보여준다. 지도는 움직이지 않는다.
      직전에 고른 건물이 새 리스트에 있으면 그 행만 강조된다 (MapResult 가 기억) */
   $('#btnRefetch').on('click', function () {
@@ -171,8 +209,42 @@ $(function () {
   /* 지도 위 칩 : 기준점 이상만 보기 켜고 끄기 */
   function applyRiskOnly() {
     $('#riskOnly').toggleClass('on', state.riskOnly).attr('aria-pressed', String(state.riskOnly))
-      .attr('title', state.riskOnly ? '누르면 모든 건물을 표시합니다' : '누르면 ' + C.SCORE_MIN + '점 이상인 건물만 표시합니다');
+      .attr('title', state.riskOnly ? '누르면 모든 건물을 표시합니다' : '누르면 ' + C.RISK_LABEL + '인 건물만 표시합니다');
   }
+  /* 모델 B 조회 범위 (5차) : [우선확인 후보만] / [전체 분석 대상] (왼쪽 패널 · 지도 아래 두 곳, 같은 값). 서버 조건이라 바꾸면 지도 · 목록 · 집계를 다시 받는다.
+     확정 조건(state.criteria)에서 범위만 바꾼다 → 패널에서 아직 [분석 실행] 하지 않은 가중치 · 조건은 끼어들지 않고, 리스트 지역 범위도 그대로 */
+  $(document).on('click', '[data-scope]', function () {
+    if (!C.MODEL_B) return;
+    var on = $(this).attr('data-scope') === 'cand';
+    if (state.analyzed && on === MapLayer.isCand()) return;
+    MapLayer.setCand(on);
+    var c = $.extend({}, state.criteria || MapLayer.getCriteria());
+    if (on) c.filterCand = true; else delete c.filterCand;
+    runAnalysis(c, { keepArea: state.analyzed });
+  });
+  /* 한파 보기 (2026-11-24) : [한파 현장확인 N동] / [전체 보기]. 확정 조건에서 보기만 바꿔 다시 조회 (점수 · 순위 · 후보는 기본 B 그대로) */
+  state.coldOnly = true;
+  $(document).on('click', '[data-coldview]', function () {
+    if (!C.MODEL_B || scen !== 'cold') return;
+    var on = $(this).attr('data-coldview') === 'target';
+    if (on === state.coldOnly) return;
+    state.coldOnly = on;
+    var c = $.extend({}, state.criteria || MapLayer.getCriteria());
+    c.coldOnly = on;
+    runAnalysis(c, { keepArea: true });
+  });
+  /* 왼쪽 패널 "분석 모드" 문구 */
+  /* 2026-11-25 : 한 줄 요약 + ⓘ (긴 설명은 ⓘ 안, 문구는 그대로) */
+  function bModeText() {
+    if (C.scenNow === 'rain') return '<b>폭우 기준</b> · 거처 30 / 건물 20 / 침수 40 / 접근성 10'
+      + C.tip('<b>폭우 시나리오</b> · ' + Common.esc(C.B_SCEN.rain.note) + ' 침수 피해 확률 · 예측이 아니라 현장 우선확인 순서입니다.');
+    if (C.scenNow === 'cold') return '<b>한파</b> · 기본 B 점수 + ' + Common.esc((C.COLD_YEAR_MAX + 1) + '년 이전 사용승인') + ' 표시'
+      + C.tip('<b>한파 (표시 방식)</b> · ' + Common.esc(C.B_SCEN.cold.note) + ' 점수 · 순위는 기본 B 그대로입니다.');
+    return BASE_MODE;
+  }
+  var BASE_MODE = '<b>기본 분석</b> (점수 모델 B) · 가중치 직접 조정'
+    + C.tip('<b>기본 분석</b> (점수 모델 B) · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.');
+  if (C.MODEL_B) $('#bModeNote').html(BASE_MODE);
   $('#riskOnly').on('click', function () {
     state.riskOnly = !state.riskOnly;
     applyRiskOnly();
@@ -300,8 +372,8 @@ $(function () {
     renderLegend(mode);
   }
   function renderLegend(mode) {
-    var key = mode + '|' + state.analyzed + '|' + state.riskOnly + '|' + state.checkedMonths;
-    var only = state.riskOnly ? C.SCORE_MIN + '점 이상만 표시 중 · ' : '';
+    var key = mode + '|' + state.analyzed + '|' + state.riskOnly + '|' + state.checkedMonths + '|' + C.scenNow + '|' + C.coldOnlyNow;
+    var only = state.riskOnly ? C.RISK_LABEL + '만 표시 중 · ' : '';
     if (key === legendKey) return;
     legendKey = key;
     var key2 = key + '|' + state.checkedMonths;
@@ -310,12 +382,12 @@ $(function () {
     var html = '<b>범례</b><span class="lg lg-chk" id="lgCheck" title="현장 확인 표시 기간"><i class="lg-check">✓</i> 현장 확인됨 <small>· ' + CHECK_LABEL[state.checkedMonths] + ' ▾</small>'
       + '<span class="lg-menu" id="chkMenu">' + [3, 12, 0, -1].map(function (m) { return '<button type="button" data-m="' + m + '" class="' + (m === state.checkedMonths ? 'on' : '') + '">' + CHECK_LABEL[m] + '</button>'; }).join('') + '</span></span>';
     if (mode === 'gu') {
-      html += '<span class="lg"><i class="sw" style="background:' + C.COLORS.red + '"></i><i class="sw" style="background:' + C.COLORS.orange + '"></i><i class="sw" style="background:' + C.COLORS.yellow + '"></i> 구 색 = 위험 건수 (많을수록 빨강)</span>'
-        + '<span class="lg lg-mode">구 단위 · 구 라벨 = ' + C.SCORE_MIN + '점 이상 · 현장 확인 건수 · 확대하면 묶음</span>';
+      html += '<span class="lg"><i class="sw" style="background:' + C.COLORS.red + '"></i><i class="sw" style="background:' + C.COLORS.orange + '"></i><i class="sw" style="background:' + C.COLORS.yellow + '"></i> 구 색 = ' + (C.MODEL_B ? '우선확인 후보' : '위험') + ' 건수 (많을수록 빨강)</span>'
+        + '<span class="lg lg-mode">구 단위 · 구 라벨 = ' + C.RISK_LABEL + ' · 현장 확인 건수 · 확대하면 묶음</span>';
     } else if (mode === 'cluster') {
       var sample = MapMarker.svgUri(MapMarker.clusterSvg({ size: 10, hist: [2, 3, 2, 3] }));
       html += lv + '<span class="lg"><img src="' + sample + '" width="22" height="22" alt=""> 숫자 = 건물 수 · 테두리 = 점수 구간 비율</span>'
-        + '<span class="lg"><span class="lg-badge">N</span>' + C.SCORE_MIN + '점 이상</span>'
+        + '<span class="lg"><span class="lg-badge">N</span>' + C.RISK_LABEL + '</span>'
         + '<span class="lg"><span class="lg-badge blue">✓N</span>현장 확인</span>'
         + '<span class="lg lg-mode">' + only + '묶음을 누르면 확대</span>';
     } else {
@@ -323,6 +395,9 @@ $(function () {
         + '<span class="lg"><span class="lg-badge blue">✓</span>핀의 체크 = 현장 확인됨</span>'
         + '<span class="lg lg-mode">' + only + '건물 단위 · 점수 높은 순 핀 ' + C.PIN_ICON_MAX + '개</span>';
     }
+    /* 모델 B 점수 설명 줄 (2026-11-25) : 범례 끝 ⓘ 안으로. 기본 B 의 "점수 = 환산 점수 …" 는 왼쪽 패널 [지표 설명] 과 같은 설명이라 왼쪽에만 둔다 */
+    if (C.MODEL_B && C.scenNow !== 'base') html += C.tip(Common.esc(C.scenNow === 'rain' ? '점수 = 폭우 시나리오 기준 우선확인 점수 (폭우 점수 3개 구 300번째 = 80점 · 최고 = 100점)'
+      : '점수 = 기본 B 환산 점수 그대로 · ' + (C.coldOnlyNow ? '한파 현장확인(기본 B 후보 중 ' + C.COLD_LABEL + ')만 표시 중' : '한파 전체 보기')), '점수 설명');
     $('#legend').html(html);
     placeRefetch();                                   // 범례 높이가 바뀌면 재검색 버튼도 따라 올라간다
   }
@@ -334,19 +409,34 @@ $(function () {
   }
 
   /* "분석 실행" : 이때 조건을 확정 → 구 요약 · 도넛/핀 · 결과 리스트를 한 번에 다시. 이후 지도 이동 · 재검색 · 보관함 저장은 모두 이 조건 */
-  function runAnalysis(c) {
+  /* opts.whole = 리스트 범위를 3개 구 전체로 (모델 B 첫 화면), opts.keepArea = 리스트 범위를 그대로 (조회 범위만 바꿀 때) */
+  function runAnalysis(c, opts) {
+    opts = opts || {};
+    var wasAnalyzed = state.analyzed;
     state.analyzed = true;
     c.scenario = scen;                                 // 어떤 기준으로 분석했는지도 조건에 남긴다 (보관함 저장 criteria JSON 에 그대로. 서버는 모르면 무시)
     c.modified = scenMod;                              // 프리셋에서 값을 직접 고쳤는지
+    /* 모델 B 기상 시나리오 (2026-11-24) : 서버가 scenario 로 점수식 · 고정 가중치를 고른다 (rain = 폭우 P3, cold = 기본 B + 한파 현장확인 표시).
+       한파 보기(coldOnly)는 한파에서만 보낸다. 다른 시나리오로 가면 지워서 섞이지 않게 */
+    if (C.MODEL_B) {
+      if (scen === 'cold') { if (c.coldOnly == null) c.coldOnly = state.coldOnly; state.coldOnly = !!c.coldOnly; if (!c.coldOnly) delete c.coldOnly; }
+      else delete c.coldOnly;
+      C.scenNow = scen === 'rain' || scen === 'cold' ? scen : 'base';
+      C.coldOnlyNow = scen === 'cold' && state.coldOnly;
+      $('#bModeNote').html(bModeText());
+    }
     state.scenRun = scen; state.modRun = scenMod;
     state.criteria = c;
     state.cellByLevel = {};
+    if (C.MODEL_B) { state.riskOnly = !!c.filterCand; applyRiskOnly(); }   // 칩 = [우선확인 후보만] 조건
     /* 리스트 범위 (2026-11-19 리뷰 8)
          ① 구 · 동을 고르지 않았을 때      = 지금 지도 화면(bbox) 안의 건물
          ② 상단에서 구 · 동을 고정했을 때  = 고정한 구 · 동 전체 (화면 범위 무시 → 화면에 걸친 이웃 구 건물이 섞이지 않는다)
          ③ [이 지역에서 재검색]            = 구 · 동 고정과 상관없이 언제나 지도 화면(bbox) — 위 #btnRefetch */
-    state.bbox = (state.gu || state.dong || state.adms.length) ? null : currentBbox();
-    showResultPanel();
+    if (opts.whole) state.bbox = null;
+    else if (!(opts.keepArea && wasAnalyzed)) state.bbox = (state.gu || state.dong || state.adms.length) ? null : currentBbox();
+    /* 모델 B (2026-11-25) : 패널을 저절로 여는 건 [분석 실행] · 검색 · 지도의 건물 · 묶음 클릭(opts.open)뿐. 첫 화면 · 시나리오 버튼 · 보기 전환은 열림 상태 그대로. legacy 는 예전처럼 늘 연다 */
+    if (opts.open || !C.MODEL_B) showResultPanel(); else prepResultView();
     $('#btnRefetch').removeClass('show');
     loadGus();
     loadPoints();
@@ -368,7 +458,10 @@ $(function () {
   MapMarker.init(map, {
     mode: function () { return modeOf(zoomNow()); },
     onMarkClick: function (m) {
-      if (m.kind === 'cluster') flyTo(m.data.lat, m.data.lng, Math.max(C.ZOOM.BUILDING, zoomNow() + 1));   // 묶음 → 확대
+      if (m.kind === 'cluster') {
+        flyTo(m.data.lat, m.data.lng, Math.max(C.ZOOM.BUILDING, zoomNow() + 1));   // 묶음 → 확대
+        if (C.MODEL_B && state.analyzed) showResultPanel();                         // 모델 B : 묶음을 누르면 결과 목록도 연다 (2026-11-25)
+      }
       else {
         selectBuilding(m.data, false);
         if (street.on) { street.markAt = Date.now(); openPano(LL(m.data.lat, m.data.lng), m.data); }   // 로드뷰 모드 : 그 건물 앞 로드뷰를 열고 사진 속에 건물 핀 1개 (2차 O)
@@ -377,7 +470,7 @@ $(function () {
     onGuClick: function (g) { flyTo(g.lat, g.lng, C.ZOOM.CLUSTER_MIN); },
     onAreaClick: function (a) { flyTo(a.lat, a.lng, C.ZOOM.CLUSTER_MIN); }   // 동 집계 원을 누르면 확대 → 도넛
   });
-  MapLayer.init({ onRun: runAnalysis, onToggle: resize, onChange: function () { setMod(true); } });   // 패널에서 직접 바꾸면 선택 칩에 "· 수정됨"
+  MapLayer.init({ onRun: function (c) { runAnalysis(c, { open: true }); }, onToggle: resize, onChange: function () { if (!C.MODEL_B) setMod(true); } });   // 패널에서 직접 바꾸면 선택 칩에 "· 수정됨" (모델 B 는 시나리오 프리셋이 없어 붙이지 않음)
   MapResult.init({ getParams: listParams, onSelect: function (b) { selectBuilding(b, true); },
     /* 0건 안내 문구용 : 지금 리스트 범위가 화면인지, 아니면 어느 구 · 동인지 */
     getScope: function () {
@@ -417,6 +510,8 @@ $(function () {
      접힘(itgeo.scenFold) : 선택한 시나리오 하나 ┃ 가중치 보기 | 펼치기. 시나리오를 골라도 자동으로 접지 않는다 */
   var scen = 'base', scenMod = false;
   var SCEN = C.SCENARIOS || [];
+  /* 모델 B 에서 쓸 수 있는 시나리오인지 (legacy 는 전부) */
+  function scenReady(k) { return !C.MODEL_B || (C.B_SCEN_READY || []).indexOf(k) >= 0; }
   function scenName(k) {
     var x = SCEN.filter(function (v) { return v.key === k; })[0];
     return x ? x.name : '';
@@ -439,7 +534,8 @@ $(function () {
   }
   $('#scenList').html(SCEN.map(function (v) {
     return '<button type="button" class="scen-btn" data-scen="' + Common.esc(v.key) + '">'
-      + (v.icon ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + Common.esc(v.icon) + '"/></svg>' : '') + Common.esc(v.name) + '<span class="scen-mod"> · 수정됨</span></button>';
+      + (v.icon ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + Common.esc(v.icon) + '"/></svg>' : '') + Common.esc(v.name) + '<span class="scen-mod"> · 수정됨</span>'
+      + (scenReady(v.key) ? '' : '<span class="scen-soon">준비 중</span>') + '</button>';
   }).join('') + '<i class="scen-sep"></i><button type="button" class="scen-view" id="scenView">가중치 보기</button>');
   $('#scenView').on('click', function () { $('#toggleLeft').trigger('click'); });   // 왼쪽 패널 여닫기 (탭과 같은 함수 → aria · 위쪽 줄 맞춤까지 같이)
   $('#scenFold').attr('aria-expanded', String(!$('#scenBar').hasClass('folded')));
@@ -447,6 +543,18 @@ $(function () {
   $('#scenList').on('click', '.scen-btn', function () {
     if ($('#scenBar').hasClass('folded')) { setFold(false); return; }     // 접힌 상태에서 남은 버튼 = 펼치기
     var k = $(this).attr('data-scen');
+    /* 모델 B (4차) : 폭우 · 폭염 · 한파는 버튼만. 점수 · 가중치 · 선택을 바꾸지 않고 안내만 */
+    if (!scenReady(k)) { Common.toast(scenName(k) + ' 시나리오 분석 기준 준비 중입니다. 점수 · 후보는 바뀌지 않습니다.'); return; }
+    /* 모델 B (2026-11-24) : 폭우 · 한파 = 고정 프리셋 (서버가 scenario 로 계산). 패널의 기본 모드 가중치 입력값은 덮지 않고(MapLayer.setScenB), 조건별 검색 · 조회 범위는 그대로 결합 */
+    if (C.MODEL_B) {
+      setScen(k);
+      MapLayer.setScenB(k);
+      if (k === 'cold') state.coldOnly = true;                            // 한파를 고르면 늘 [한파 현장확인] 보기부터
+      var cb = MapLayer.getCriteria();
+      if (k === 'cold') cb.coldOnly = true;
+      runAnalysis(cb, { keepArea: state.analyzed });
+      return;
+    }
     MapLayer.applyPreset(SCEN.filter(function (v) { return v.key === k; })[0]);
     setScen(k);
     runAnalysis(MapLayer.getCriteria());
@@ -616,7 +724,8 @@ $(function () {
   });
   function search() {
     state.q = $.trim($('#searchQ').val());
-    if (!state.analyzed) { runAnalysis(MapLayer.getCriteria()); return; }
+    if (!state.analyzed) { runAnalysis(MapLayer.getCriteria(), { open: true }); return; }
+    if (C.MODEL_B) showResultPanel();                 // 모델 B : 검색하면 결과 목록을 연다 (2026-11-25)
     renderScope();                                    // 검색 중에는 범위가 화면 → 구 · 동 으로 바뀐다
     MapResult.load(true);
   }
@@ -931,9 +1040,12 @@ $(function () {
   /* map.do?changed=up (데이터 업데이트 완료 → [새로 위험해진 N동 지도에서 보기]) : 오른쪽 결과 패널을 연다.
      그 건물들만 추리는 것은 배치 서버가 report.diff(upBldIds)를 주면 서버 쪽에 연결한다. 지금은 현재 조건의 결과 그대로 */
   if (window.OPEN_CHANGED === 'up') {
-    runAnalysis(MapLayer.getCriteria());
+    runAnalysis(MapLayer.getCriteria(), { open: true });
     Common.toast('새로 위험해진 건물만 추리는 기능은 배치 서버 연동 뒤 적용됩니다. 지금은 전체 결과입니다.');
   }
+  /* 모델 B 첫 화면 (5차) : 기본 가중치(100 · 100 · 100 · 100 = 25%씩) · 조회 범위 [우선확인 후보만] 으로 바로 분석. 리스트 범위 = 3개 구 전체(구청 계정은 소속 구).
+     건물 열기(map.do?bldId=) · 변경 건물 보기(changed=up)는 각자 흐름이 있어 건너뛴다 */
+  else if (C.MODEL_B && !window.OPEN_BLD) runAnalysis(MapLayer.getCriteria(), { whole: true });
   if (window.OPEN_MSG) Common.toast(window.OPEN_MSG);
   if (window.OPEN_BLD) {
     MapApi.building($.extend({}, criteria(), { bldId: window.OPEN_BLD })).done(function (d) {

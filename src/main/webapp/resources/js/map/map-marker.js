@@ -76,7 +76,7 @@ window.MapMarker = (function () {
   }
   function drawPin(m) {
     var b = m.data, lv = levelOf(b.score), sel = b.bldId === selectedId;
-    var title = (b.bldNm ? b.bldNm + ' · ' : '') + Common.shortAddr(b.addr) + ' · ' + b.score + '점' + (b.vulnHhCnt ? ' · 취약 가구 ' + b.vulnHhCnt : '') + (b.checked ? ' · 현장 확인됨' : '');
+    var title = (b.bldNm ? b.bldNm + ' · ' : '') + Common.shortAddr(b.addr) + ' · ' + (C.scoreWord ? C.scoreWord() : (C.MODEL_B ? '환산 ' : '')) + C.dispScore(b) + '점' + (b.candidate || (C.MODEL_B && b.score >= 80) ? ' · ' + (C.scenNow === 'rain' ? '폭우 우선확인 후보' : '우선확인 후보') : '') + (b.vulnHhCnt ? ' · 취약 가구 ' + b.vulnHhCnt : '') + (b.checked ? ' · 현장 확인됨' : '');
     /* 점수 순 상위 PIN_ICON_MAX 밖의 건물은 지름 8px 색 점 (아이콘 · 라벨 없음). 눌러도 상세는 열린다. 현장 확인된 점은 파란 테두리 */
     if (b.dot && !sel) {
       m.el.className = 'mk-inv kdot' + (b.checked ? ' chk' : '');
@@ -107,7 +107,7 @@ window.MapMarker = (function () {
       + (c.riskCount > 0 ? '<i style="left:' + (S / 2 + k) + 'px;top:' + (S / 2 - k) + 'px">' + compact(c.riskCount) + '</i>' : '')
       + (c.checkedCnt > 0 ? '<em style="left:' + (S / 2 + k) + 'px;top:' + (S / 2 + k) + 'px" title="현장 확인 ' + c.checkedCnt + '동">✓' + compact(c.checkedCnt) + '</em>' : '');
     putMarker(m, LL(c.lat, c.lng), new naver.maps.Point(S / 2, S / 2), 10 + Math.min(c.riskCount, 80),
-      '건물 ' + c.size + '동 · ' + C.SCORE_MIN + '점 이상 ' + c.riskCount + '동 · 현장 확인 ' + (c.checkedCnt || 0) + '동 · 최고 ' + c.maxScore + '점');
+      '건물 ' + c.size + '동 · ' + (C.MODEL_B && C.riskWord ? C.riskWord() : C.RISK_LABEL) + ' ' + c.riskCount + '동 · 현장 확인 ' + (c.checkedCnt || 0) + '동 · 최고 ' + c.maxScore + '점');
   }
 
   /* 화면 픽셀 거리 MERGE_PX 안의 도넛끼리 하나로 (큰 쪽에 숫자 · 구간을 더하고, 위치는 건물 수 가중 평균). 그리기 직전에 */
@@ -218,7 +218,7 @@ window.MapMarker = (function () {
       var el = document.createElement('div');
       el.className = 'mk-inv kgu';
       el.style.borderColor = col;
-      el.innerHTML = '<b>' + esc(g.name) + '</b>위험 ' + Common.num(g.riskCount) + '곳'
+      el.innerHTML = '<b>' + esc(g.name) + '</b>' + (C.riskWord ? C.riskWord() + ' ' : (C.MODEL_B ? '우선확인 후보 ' : '위험 ')) + Common.num(g.riskCount) + '곳'
         + (g.checkedCnt > 0 ? '<small>현장 확인 ' + Common.num(g.checkedCnt) + '곳</small>' : '');   /* 9단계 : 구 원 안에 한 줄 */
       var label = new naver.maps.Marker({ position: LL(g.lat, g.lng), icon: { content: el, anchor: new naver.maps.Point(48, 48) }, zIndex: 5 });
       naver.maps.Event.addListener(polygon, 'click', function () { if (handlers.onGuClick) handlers.onGuClick(g); });
@@ -246,7 +246,7 @@ window.MapMarker = (function () {
       var el = document.createElement('div');
       el.className = 'mk-inv kgu';
       el.style.borderColor = '#00D1FF';
-      el.innerHTML = '<b>' + esc(a.name) + '</b>위험 ' + Common.num(a.riskCount) + '곳'
+      el.innerHTML = '<b>' + esc(a.name) + '</b>' + (C.riskWord ? C.riskWord() + ' ' : (C.MODEL_B ? '우선확인 후보 ' : '위험 ')) + Common.num(a.riskCount) + '곳'
         + (a.checkedCnt > 0 ? '<small>현장 확인 ' + Common.num(a.checkedCnt) + '곳</small>' : '');
       var mk = new naver.maps.Marker({ position: LL(a.lat, a.lng), icon: { content: el, anchor: new naver.maps.Point(48, 48) }, zIndex: 6 });
       naver.maps.Event.addListener(mk, 'click', function () { if (handlers.onAreaClick) handlers.onAreaClick(a); });

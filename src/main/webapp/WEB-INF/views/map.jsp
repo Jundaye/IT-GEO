@@ -18,6 +18,56 @@
     <div class="layer-scroll">
       <%-- 요인은 위험 유형 4묶음 아래로 (5-1 "가중치·분석 실행·도넛"). 켜고 끄기만, 새 요인 추가 없음. 점수(가중치)는 [가중치 조정] 팝업에서만 보인다 (피그마 02) --%>
 
+      <c:if test="${criteria.modelB}">
+      <%-- 점수 모델 B (4차 2026-11-23) : ① 분석 모드 · 날씨  ② 조건별 검색(보기 조건, 점수 · 가중치와 따로)  ③ 가중치(별도 팝업)  ④ 지표 설명(접힘).
+           조건은 [data-bf] 행, map-layer.js 가 MAP_CONFIG.B_FILTERS 로 채운다. 고른 조건은 모두 충족(AND), 아무것도 안 고르면 전체 분석 대상 --%>
+      <section class="sec">
+        <div class="sec-head"><span class="caret"></span>분석 모드</div>
+        <div class="sec-body">
+          <p class="sec-note b-mode" id="bModeNote"><b>기본 분석</b> (점수 모델 B) · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.</p>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head"><span class="caret"></span>조건별 검색 <span class="badge" id="bfCount" hidden></span></div>
+        <div class="sec-body">
+          <%-- 조회 범위 (5차) : 지도 아래 같은 버튼과 같은 값. 누르면 바로 다시 조회. 조건은 고른 범위 안에서 찾는다 --%>
+          <div class="scope-seg" role="group" aria-label="조회 범위"><span class="scope-lbl">조회 범위</span><button type="button" data-scope="cand" aria-pressed="true">우선확인 후보만</button><button type="button" data-scope="all" aria-pressed="false">전체 분석 대상</button></div>
+          <p class="sec-note">우선확인 후보 = 3개 구 전체 48,463동 중 300번째 점수(환산 ${criteria.scoreMin}점) 이상. 지역 · 조건을 걸어도 후보 판정은 그대로입니다.</p>
+          <p class="sec-note">고른 조건을 <b>모두</b> 만족하는 건물만 지도 · 목록 · 집계에 보입니다. 점수와 가중치는 바뀌지 않습니다.</p>
+          <div class="f-row" data-bf="ugrnd"><label class="chk"><input type="checkbox" class="bf-chk"> 지하층 보유 주택만</label><span class="f-val">지하층 있음</span></div>
+          <div class="f-row" data-bf="lodging"><label class="chk"><input type="checkbox" class="bf-chk"> 고시원 · 여관 · 여인숙만</label><span class="f-val">숙박형 거처</span></div>
+          <div class="f-row has-rng" data-bf="flood"><label class="chk"><input type="checkbox" class="bf-chk"> 침수 기록 연도 수</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
+          <div class="f-row has-rng" data-bf="age"><label class="chk"><input type="checkbox" class="bf-chk"> 사용승인 후 연수</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
+          <div class="f-row has-rng" data-bf="slope"><label class="chk"><input type="checkbox" class="bf-chk"> 경사도</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
+          <p class="bf-sub">추가 조회 조건 <small>B 점수에는 넣지 않음</small></p>
+          <div class="f-row" data-bf="viol"><label class="chk"><input type="checkbox" class="bf-chk"> 위반건축물</label><span class="f-val">대장 등재</span></div>
+          <div class="f-row has-rng" data-bf="low"><label class="chk"><input type="checkbox" class="bf-chk"> 저지대 (해발)</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
+          <div class="f-row has-rng" data-bf="cheap"><label class="chk"><input type="checkbox" class="bf-chk"> 저가 주택 (공시가격 백분위)</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
+          <button type="button" class="link-muted bf-reset" id="bfReset">조건 모두 해제</button>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head"><span class="caret"></span>점수 가중치</div>
+        <div class="sec-body">
+          <p class="sec-note">적용 비율 <b id="bwSummary"></b></p>
+          <p class="sec-note">아래 [가중치 조정]에서 영역마다 0~100으로 정하면 비율대로 반영합니다.</p>
+        </div>
+      </section>
+
+      <section class="sec collapsed">
+        <div class="sec-head"><span class="caret"></span>지표 설명 <span class="badge">도움말</span></div>
+        <div class="sec-body">
+          <p class="sec-note">화면 점수는 <b>환산 점수</b>입니다. 3개 구에서 계산 점수 300번째 건물 = 80점, 가장 높은 건물 = 100점으로 맞춘 값이며, 80점 이상은 <b>우선확인 후보</b>입니다. 300번째는 조건 · 지역과 상관없이 늘 3개 구 전체 분석 대상(세대수가 있는 건물)에서 구합니다.</p>
+          <p class="sec-note"><b>거처 특성</b> · 지하층 보유 주택 또는 숙박형 거처(고시원 · 여관 · 여인숙)면 1. 실제 지하 거주 여부는 현장 확인이 필요합니다.</p>
+          <p class="sec-note"><b>건물 상태</b> · 사용승인 후 30년이면 0, 66년 이상이면 1 (기준 연도 2026). 사용승인일이 없으면 이 영역을 빼고 계산합니다.</p>
+          <p class="sec-note"><b>지형·재해</b> · 침수 기록 연도 수(5개 연도 이상이면 1)와 경사(15°부터, 25.8° 이상이면 1) 중 큰 값.</p>
+          <p class="sec-note"><b>생활시설 접근성</b> · 가장 가까운 버스정류장(500m → 677.96m)과 의료기관(750m → 1,122.64m) 거리 값의 평균.</p>
+        </div>
+      </section>
+      </c:if>
+      <c:if test="${not criteria.modelB}">
       <section class="sec">
         <div class="sec-head"><span class="caret"></span>1. 주거 공간</div>
         <div class="sec-body">
@@ -73,6 +123,7 @@
           </div>
         </div>
       </section>
+      </c:if>
 
       <section class="sec collapsed">
         <div class="sec-head"><span class="caret"></span>5. 인구 · 가구 <span class="badge">우선순위</span></div>
@@ -81,12 +132,14 @@
         </div>
       </section>
 
+      <c:if test="${not criteria.modelB}">
       <section class="sec collapsed">
         <div class="sec-head"><span class="caret"></span>6. 자원 · 접근성 <span class="badge">참고</span></div>
         <div class="sec-body">
           <p class="sec-note">가장 가까운 병원 · 복지시설 · 버스정류장까지 거리는 건물 상세에 표시합니다. 점수에는 넣지 않습니다.</p>
         </div>
       </section>
+      </c:if>
 
     </div>
 
@@ -98,6 +151,15 @@
     <%-- 가중치 조정 팝업 (피그마 02 가중치 조정 열림) : 위험 유형 4묶음, 묶음마다 0~100. 점수에는 비율로 환산 (map-layer.js) --%>
     <div class="weight-pop" id="weightPop">
       <div class="wp-head"><b>가중치 조정</b><button type="button" class="link-muted" id="weightReset">초기화</button><button type="button" class="wp-close" id="weightClose" title="닫기">×</button></div>
+      <c:if test="${criteria.modelB}">
+      <div class="wp-row" data-bw="H"><div class="wp-name">거처 특성 <small>지하층 보유 주택 · 숙박형 거처</small></div><b id="wbv-H"></b><input type="range" id="wb-H"></div>
+      <div class="wp-row" data-bw="O"><div class="wp-name">건물 상태 <small>사용승인 연수</small></div><b id="wbv-O"></b><input type="range" id="wb-O"></div>
+      <div class="wp-row" data-bw="R"><div class="wp-name">지형·재해 <small>침수 기록 연도 수 · 경사</small></div><b id="wbv-R"></b><input type="range" id="wb-R"></div>
+      <div class="wp-row" data-bw="A"><div class="wp-name">생활시설 접근성 <small>버스정류장 · 의료기관 거리</small></div><b id="wbv-A"></b><input type="range" id="wb-A"></div>
+      <p class="wp-sum" id="wbSum"></p>
+      <p class="wp-note">영역마다 0~100을 따로 정하면 비율대로 반영합니다 (100·100·100·100이면 25%씩, 100·50·100·50이면 2:1:2:1). 줄마다 <b>입력값 → 적용 비율</b>. 가중치를 바꾸면 환산 기준(3개 구 전체 300번째 · 최고 점수)도 그 비율로 다시 구합니다. 조건별 검색과는 상관없습니다.</p>
+      </c:if>
+      <c:if test="${not criteria.modelB}">
       <div class="wp-row" data-gw="space"><div class="wp-name">주거 공간 <small>지하층 · 옥탑 · 고시원</small></div><b id="wv-space"></b><input type="range" id="w-space"></div>
       <div class="wp-row" data-gw="bld"><div class="wp-name">건물 상태 <small>노후 · 위반건축물</small></div><b id="wv-bld"></b><input type="range" id="w-bld"></div>
       <div class="wp-row" data-gw="flood"><div class="wp-name">침수 위험 <small>침수 이력 · 저지대</small></div><b id="wv-flood"></b><input type="range" id="w-flood"></div>
@@ -105,6 +167,7 @@
       <%-- 점수 규칙 안내 (10단계 규칙, 15단계 B-7 문구) --%>
       <p class="wp-sum" id="wpSum"></p>
       <p class="wp-note">묶음마다 0~100으로 정하면 비율대로 100점 만점에 나눠 반영합니다 (100·100·100·100이면 25점씩, 100·50·100·50이면 2:1:2:1). 주거 공간은 지하·고시원·옥탑 중 하나라도 맞으면 묶음 점수 전부, 건물 상태·침수 위험은 켠 요인 중 맞은 비율만큼, 경제 여건은 맞으면 전부.</p>
+      </c:if>
     </div>
   </aside>
 
@@ -168,9 +231,14 @@
     <div class="map-bottom">
       <div class="map-legend" id="legend"></div>
       <%-- 살피구로 #risk-only : 켜져 있으면 기준점 이상 건물이 있는 묶음(빨간 숫자)과 그런 건물 핀만 지도에 표시. 위쪽 줄에 있던 것을 범례 옆으로 내렸다 (2차) --%>
+      <c:choose><c:when test="${criteria.modelB}">
+      <%-- 모델 B (5차) : 조회 범위 두 칸. 왼쪽 패널 "조회 범위" 와 같은 값 --%>
+      <div class="scope-seg map-scope" role="group" aria-label="조회 범위"><button type="button" data-scope="cand" aria-pressed="true">우선확인 후보만</button><button type="button" data-scope="all" aria-pressed="false">전체 분석 대상</button></div>
+      </c:when><c:otherwise>
       <button type="button" class="chip chip-toggle on" id="riskOnly" aria-pressed="true" title="누르면 모든 건물을 표시합니다">
       <span class="ck">✓</span><span><b>${criteria.scoreMin}</b>점 이상만 보기</span>
     </button>
+      </c:otherwise></c:choose>
     </div>
 
     <%-- 줌 단계 : + / 세로 눈금 슬라이더 / − . 눈금 · 채움 · 손잡이 · 숫자는 map-main.js 가 그린다 --%>
@@ -222,6 +290,10 @@
   <%-- ================= 오른쪽 : 결과 리스트 / 건물 상세 ================= --%>
   <%-- 오른쪽 여닫기 버튼 : 패널 왼쪽 끝 바깥 (닫히면 화면 오른쪽 끝). 꺾쇠는 여는 방향(‹), 열림 상태에서는 CSS 가 뒤집어 › --%>
   <button type="button" class="side-toggle side-toggle-r" id="toggleRight" aria-expanded="false" title="결과 패널 열기 · 닫기"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <c:if test="${criteria.modelB}">
+  <%-- 모델 B (2026-11-25) : 패널은 닫힌 채 시작. 여닫기 버튼 옆 건수 표시(map-result.js renderHeadB 가 채움), 누르면 패널을 열고 지금 목록 --%>
+  <button type="button" class="rp-count" id="rpCount" hidden title="검색 결과 목록 열기"></button>
+  </c:if>
   <aside class="right-panel" id="panelRight">
     <div class="pn-grip" id="rpGrip" title="끌어서 폭 조절 (두 번 누르면 기본 폭)"></div>
 
@@ -230,10 +302,11 @@
       <div class="rp-head"><h2>검색 결과</h2><button type="button" class="rp-close" id="resultClose">×</button></div>
       <p class="rs-blank">분석 실행을 누르면 결과가 여기에 표시됩니다</p>
       <div class="rs-scope" id="resultScope"></div>
+      <p class="rs-split" id="resultSplit" hidden></p>
       <div class="rs-bar">
         <span class="rs-count" id="resultCount"><b>0</b> 건</span>
         <select class="field sel-sm" id="resultSort">
-          <option value="score">취약 점수 높은 순</option>
+          <option value="score">${criteria.modelB ? '환산 점수 높은 순' : '취약 점수 높은 순'}</option>
           <option value="old">오래된 건물 순</option>
           <option value="addr">주소 순</option>
         </select>
@@ -254,7 +327,9 @@
   window.navermap_authFailure = function () {
     document.getElementById('map').innerHTML = '<div class="map-error"><b>네이버 지도 인증 실패</b><p>Client ID 또는 Web 서비스 URL 등록을 확인하세요.</p></div>';
   };
+  window.APP_MODEL = '${criteria.modelB ? "b" : "legacy"}';   // 점수 모델 (app.properties app.analysis.model) → map-config MODEL_B
   window.APP_SCORE_MIN = ${criteria.scoreMin};   // 기준점 (app.properties app.analysis.score-min) → map-config SCORE_MIN
+  window.APP_COLD_YEAR = ${criteria.coldYearMax};   // 한파 현장확인 기준 연도 (AnalysisCriteriaTO.COLD_YEAR_MAX 한 곳) → map-config COLD_YEAR_MAX
   window.APP_VWORLD_KEY = '<c:out value="${vworldKey}"/>';   // 브이월드 인증키 (app.properties app.vworld.api-key) → resources/vworld3d/bld3d-frame.html 이 읽는다
   window.LOCK_GU = '<c:out value="${lockGu}"/>';   // 구청 계정이면 소속 구 코드, 서울시청이면 
   window.OPEN_BLD = '<c:out value="${openBldId}"/>';   // map.do?bldId= (05 지도에서 보기)

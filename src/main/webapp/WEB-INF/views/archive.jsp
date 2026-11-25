@@ -77,7 +77,7 @@
 
     <%-- [상세 필터] 펼침칸 (5-1). 값은 GET 파라미터로 가고 mapper-archive.archiveRows 의 <if> 가 거른다 --%>
     <div class="filter-detail" id="filterDetail" style="${criteria.fopen ? '' : 'display:none'}">
-      <div class="fd-row"><span class="fd-label">취약 요인</span>
+      <div class="fd-row"><span class="fd-label">${scoreModelB ? '영역' : '취약 요인'}</span>
         <div class="fd-opts">
           <c:forEach var="f" items="${factorOpts}">
             <label class="chk"><input type="checkbox" name="factors" value="${f.key}" ${fn:contains(factorsSel, ','.concat(f.key).concat(',')) ? 'checked' : ''}> <c:out value="${f.value}"/></label>
@@ -90,6 +90,7 @@
       <div class="fd-row"><span class="fd-label">점수 구간</span>
         <div class="fd-opts">
           <label class="chk"><input type="checkbox" name="bands" value="80" ${fn:contains(bandsSel, ',80,') ? 'checked' : ''}> 80점 이상</label>
+          <c:if test="${scoreModelB}"><small class="muted" title="기존 점수와 B 환산 점수가 함께 있으면 같은 숫자라도 기준이 다릅니다">저장 점수 기준</small></c:if>
           <label class="chk"><input type="checkbox" name="bands" value="60" ${fn:contains(bandsSel, ',60,') ? 'checked' : ''}> 60~79점</label>
           <label class="chk"><input type="checkbox" name="bands" value="40" ${fn:contains(bandsSel, ',40,') ? 'checked' : ''}> 40~59점</label>
           <span class="muted">(저장 당시 점수)</span>
@@ -159,7 +160,7 @@
         <td><span class="badge scen scen-${r.scenKey}" title="<c:out value='${r.scenTitle}'/>"><c:out value="${r.scenLabel}"/></span></td>
         <td><c:out value="${empty r.factorText ? '-' : r.factorText}"/><c:if test="${r.vulnHhCnt > 0}"> <small class="muted">· 취약 가구 ${r.vulnHhCnt}</small></c:if></td>
         <%-- 점수 색 = 지도 핀 구간 색 (map-config.js LEVELS : 80 / 60 / 40) --%>
-        <td><span class="score-bar ${r.score >= 80 ? 'lv-red' : r.score >= 60 ? 'lv-orange' : r.score >= 40 ? 'lv-yellow' : 'lv-green'}"><i><b style="width:${r.score}%"></b></i><span>${r.score}</span></span></td>
+        <td><span class="score-bar ${r.score >= 80 ? 'lv-red' : r.score >= 60 ? 'lv-orange' : r.score >= 40 ? 'lv-yellow' : 'lv-green'}"><i><b style="width:${r.score}%"></b></i><span>${r.score}</span></span><c:choose><c:when test="${r.scoreModel == 'b' and r.rainBasis}"><small class="tag-model b rain" title="폭우 시나리오 기준 우선확인 점수(환산)로 저장. 기본 B 환산 점수와 산식 · 환산 기준이 다릅니다">B 폭우</small></c:when><c:when test="${r.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)<c:if test="${not empty r.scoreBasis}"> · <c:out value="${r.scoreBasis}"/></c:if>">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose></td>
         <td>${r.priorityRank}위</td>
         <td><span class="badge ${fn:toLowerCase(r.status)}"><c:out value="${r.statusLabel}"/></span></td>
         <td class="muted"><c:out value="${r.savedAt}"/></td>

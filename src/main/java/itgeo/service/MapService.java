@@ -9,11 +9,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import itgeo.common.BadRequestException;
+import itgeo.common.ScoreScale;
 import itgeo.dao.BuildingDAO;
 import itgeo.to.AnalysisCriteriaTO;
 import itgeo.to.BuildingDetailTO;
@@ -49,13 +51,47 @@ public class MapService {
 
 	private Map<String, List<double[]>> ringCache;   // sgg_cd → 볼록 껍질 [[lng,lat],...] (한 번 계산)
 
-	// 법정동 목록 (보관함 필터 등)
-	public List<DongTO> getDongList() {
-		return dao.getDongList(null);
+	// ---------- 동 목록 기억 (1시간) ----------
+	static final long DONG_CACHE_MS = 60L * 60 * 1000;
+	private volatile List<DongTO> dongListCache;
+	private final Map<String, List<DongTO>> dongTreeCache = new ConcurrentHashMap<>();   // gu("" = 전체) → 트리
+	private volatile long dongCachedAt = System.currentTimeMillis();
+
+	/** 기억해 둔 동 목록 · 구 경계 · 모델 B 환산 기준(300번째 · 최고 점수)을 비운다. 다음 요청 때 DB 에서 새로 만든다 (데이터 업데이트 뒤 DataUpdateService 가 부름) */
+	public synchronized void clearCache() {
+		dongListCache = null;
+		dongTreeCache.clear();
+		ringCache = null;
+		scaleCache.clear();
+		dongCachedAt = System.currentTimeMillis();
 	}
 
-	/** 동 선택 2단계 (5-1) : 법정동 줄마다 행정동 목록(adms)을 단다. gu 가 없으면 3개 구 전체 */
+	private void expireDongCache() {
+		if (System.currentTimeMillis() - dongCachedAt > DONG_CACHE_MS) clearCache();
+	}
+
+	// 법정동 목록 (보관함 필터 등). 기억해 둔 목록은 바꿀 수 없는 목록으로 돌려준다
+	public List<DongTO> getDongList() {
+		expireDongCache();
+		List<DongTO> l = dongListCache;
+		if (l == null) {
+			l = java.util.Collections.unmodifiableList(dao.getDongList(null));
+			dongListCache = l;
+		}
+		return l;
+	}
+
+	/** 동 선택 2단계 (5-1) : 법정동 줄마다 행정동 목록(adms)을 단다. gu 가 없으면("" · null) 3개 구 전체.
+	    기억하는 키는 전체("")와 3개 구 코드만 (그 밖의 값은 매번 조회 → 이상한 gu 값으로 캐시가 끝없이 늘지 않게) */
 	public List<DongTO> getDongTree(String gu) {
+		expireDongCache();
+		String key = gu == null ? "" : gu;
+		if (!key.isEmpty() && !GU_NAME.containsKey(key)) return buildDongTree(key);
+		return dongTreeCache.computeIfAbsent(key, k -> java.util.Collections.unmodifiableList(buildDongTree(k)));
+	}
+
+	private List<DongTO> buildDongTree(String gu) {
+		if (gu != null && gu.isEmpty()) gu = null;                                    // mapper 는 null · "" 모두 전체로 보지만 같은 값으로 맞춘다
 		List<DongTO> emds = dao.getDongList(gu);
 		Map<String, DongTO> byKey = new HashMap<>();
 		for (DongTO e : emds) byKey.put(e.getSggCd() + "|" + e.getEmdNm(), e);
@@ -116,8 +152,53 @@ public class MapService {
 		return ok == null || ok.contains(admNm);
 	}
 
+	// ---------- 모델 B 환산 점수 (VSCODE_지시문_점수모델B "환산 점수") ----------
+	/** 가중치 조합 → { 경계, 최고, 계산한 시각 }. 같은 가중치는 10분 동안 다시 구하지 않는다 */
+	private final Map<String, double[]> scaleCache = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final long SCALE_TTL_MS = 10 * 60 * 1000L;
+
+	/** 모델 B 면 지금 가중치의 환산 기준(3개 구 전체 300번째 · 최고 계산 점수)을 c 에 넣는다. legacy 면 아무것도 안 함 */
+	public void prepareScale(AnalysisCriteriaTO c) {
+		if (!c.isModelB()) return;
+		// 시나리오마다 점수식이 다르므로(폭우 = F) 키에 계산 기준도 넣는다. 한파는 기본 B 와 같은 식이라 base 와 같은 기준
+		String key = (c.isScenRain() ? "rain" : "base") + ":" + c.getWeightH() + "," + c.getWeightO() + "," + c.getWeightR() + "," + c.getWeightA();
+		double[] v = scaleCache.get(key);
+		if (v == null || System.currentTimeMillis() - (long) v[2] > SCALE_TTL_MS) {
+			List<Double> top = dao.getScoreTopB(c);
+			double max = top.isEmpty() ? 0 : top.get(0);
+			double boundary = top.isEmpty() ? 0 : top.get(Math.min(299, top.size() - 1));
+			v = new double[] { boundary, max, System.currentTimeMillis() };
+			if (scaleCache.size() > 200) scaleCache.clear();
+			scaleCache.put(key, v);
+		}
+		c.setScaleBoundary(v[0]);
+		c.setScaleMax(v[1]);
+	}
+
+	/** 모델 B : score = 환산 점수(소수 유지), rawScore = 계산 점수, displayScore = 버림 정수, candidate = 계산 ≥ 경계 */
+	private static void applyScale(BuildingTO b, AnalysisCriteriaTO c) {
+		if (b == null || !c.isModelB() || c.getScaleBoundary() == null) return;
+		// 분석 대상 = SQL 의 score_target (IFNULL(units, 0) > 0). 값이 없을 때만 units 로 판단
+		boolean target = b.getScoreTarget() != null ? b.getScoreTarget() : b.getUnits() != null && b.getUnits() > 0;
+		b.setScoreTarget(target);
+		if (!target) { b.setScore(0); b.setCandidate(false); return; }
+		double raw = b.getScore(), s = ScoreScale.scaled(raw, c.getScaleBoundary(), c.getScaleMax());
+		b.setRawScore(raw);
+		b.setScore(s);
+		b.setDisplayScore(ScoreScale.display(s));
+		b.setCandidate(raw >= c.getScaleBoundary());
+	}
+	private static void applyScale(BuildingMarkerTO m, AnalysisCriteriaTO c) {
+		if (m == null || !c.isModelB() || c.getScaleBoundary() == null) return;
+		double raw = m.getScore(), s = ScoreScale.scaled(raw, c.getScaleBoundary(), c.getScaleMax());
+		m.setRawScore(raw);
+		m.setScore(s);
+		m.setDisplayScore(ScoreScale.display(s));
+	}
+
 	/** 구 단위 (zoom 14 이하) : 경계 + "위험 N곳". 경계는 building 좌표의 볼록 껍질 */
 	public List<GuTO> getGuList(AnalysisCriteriaTO c) {
+		prepareScale(c);
 		Map<String, List<double[]>> rings = rings();
 		List<GuTO> out = new ArrayList<>();
 		for (GuTO g : dao.getGuSummary(c)) {
@@ -130,6 +211,7 @@ public class MapService {
 
 	/** 격자 묶음 (살피구로 AnalysisService.clusters() 를 SQL 로) */
 	public List<ClusterTO> getClusterList(AnalysisCriteriaTO c) {
+		prepareScale(c);
 		c.applyBbox();
 		if (c.getMinLat() == null) return new ArrayList<>();
 		double cell = Math.max(1e-5, Math.min(c.getCell(), 5.0));
@@ -144,6 +226,7 @@ public class MapService {
 		}
 		List<ClusterTO> list = dao.getClusterList(c);
 		for (ClusterTO cl : list) {
+			if (c.isModelB() && c.getScaleBoundary() != null) cl.setMaxScore(ScoreScale.scaled(cl.getMaxScore(), c.getScaleBoundary(), c.getScaleMax()));
 			cl.setCell(new double[] { cl.getIx() * cell, cl.getIy() * cellLat, (cl.getIx() + 1) * cell, (cl.getIy() + 1) * cellLat });
 			if (cl.getSize() == 1) {   // 칸에 건물이 1동이면 핀으로
 				BuildingMarkerTO p = new BuildingMarkerTO();
@@ -154,6 +237,7 @@ public class MapService {
 				p.setBldNm(cl.getOneBldNm());
 				p.setAddr(cl.getOneAddr());
 				p.setUseNm(cl.getOneUseNm());
+				applyScale(p, c);
 				cl.setPoint(p);
 			}
 		}
@@ -165,7 +249,10 @@ public class MapService {
 		c.applyBbox();
 		if (c.getMinLat() == null) return new ArrayList<>();   // 범위 없이는 조회하지 않음
 		if (c.getLimit() <= 0 || c.getLimit() > 3000) c.setLimit(1500);
-		return dao.getMarkerList(c);
+		prepareScale(c);
+		List<BuildingMarkerTO> list = dao.getMarkerList(c);
+		for (BuildingMarkerTO m : list) applyScale(m, c);
+		return list;
 	}
 
 	// 분석 전 : 현장 확인됨 핀
@@ -177,15 +264,44 @@ public class MapService {
 	public PageTO<BuildingTO> getResultPage(AnalysisCriteriaTO c) {
 		c.applyBbox();
 		if (c.getSize() <= 0 || c.getSize() > 100) c.setSize(20);
-		int total = dao.getResultCount(c);
+		prepareScale(c);
+		Integer matchTotal = null, candTotal = null;
+		int total;
+		Integer coldTotal = null, coldUnknown = null;
+		if (c.isModelB() && c.isFilterOn()) {
+			// 모델 B (5차) : 조건 충족 전체 · 그중 우선확인 후보를 같이 센다 (조회 범위와 상관없이). total = 지금 조회 범위의 건수
+			// 한파 (2026-11-24) : 그 후보 중 한파 현장확인 대상 · 확인 불가도 같이 센다. [한파 현장확인만] 이면 total = 한파 대상 수
+			boolean cand = c.isFilterCand(), coldOnly = c.isColdOnly();
+			c.setFilterCand(false);
+			c.setColdOnly(false);
+			java.util.Map<String, Object> m = dao.getResultCountB(c);
+			c.setFilterCand(cand);
+			c.setColdOnly(coldOnly);
+			matchTotal = ((Number) m.get("match_cnt")).intValue();
+			candTotal = ((Number) m.get("cand_cnt")).intValue();
+			if (m.get("cold_cnt") != null) {
+				coldTotal = ((Number) m.get("cold_cnt")).intValue();
+				coldUnknown = ((Number) m.get("cold_unknown_cnt")).intValue();
+			}
+			total = c.isColdFilter() && coldTotal != null ? coldTotal : cand && c.getScaleBoundary() != null ? candTotal : matchTotal;
+		} else total = dao.getResultCount(c);
 		List<BuildingTO> list = dao.getResultList(c);
 		int rank = c.getOffset();
-		for (BuildingTO b : list) b.setRank(++rank);
-		return new PageTO<>(c.getPage(), c.getSize(), total, list);
+		for (BuildingTO b : list) { b.setRank(++rank); applyScale(b, c); }
+		PageTO<BuildingTO> page = new PageTO<>(c.getPage(), c.getSize(), total, list);
+		page.setMatchTotal(matchTotal);
+		page.setCandTotal(candTotal);
+		page.setColdTotal(coldTotal);
+		page.setColdUnknown(coldUnknown);
+		if (c.isModelB()) page.setScenario(c.getScenarioB());
+		return page;
 	}
 
 	/** 가중치 4묶음은 각각 0~100, 합 100 이어야 계산한다 (15단계 B-6). 화면은 늘 100 을 맞추므로 주소를 직접 고친 경우 대비. 아니면 400 */
 	public static final String MSG_WEIGHT = "가중치는 묶음마다 0~100 사이로 정해 주세요";
+	public static final String MSG_WEIGHT_B = "영역 가중치는 영역마다 0~100 사이로 정해 주세요";
+	public static final String MSG_WEIGHT_B_ZERO = "영역 가중치를 하나 이상 0보다 크게 해 주세요";
+	public static final String MSG_WEIGHT_B_ONLY_O = "건물 상태만으로는 분석할 수 없어요. 사용승인일이 없는 건물이 있어 다른 영역도 하나 이상 0보다 크게 해 주세요";
 	public static final String MSG_WEIGHT_ZERO = "켜진 요인의 가중치를 하나 이상 0보다 크게 해 주세요";
 	/** 묶음 가중치는 각각 0~100, 켜진 묶음 합은 0 보다 커야 한다 (점수에는 비율로 환산 : AnalysisCriteriaTO.getSpacePt …) */
 	public static void assertWeights(AnalysisCriteriaTO c) {
@@ -194,6 +310,15 @@ public class MapService {
 			if (v < 0 || v > 100) throw new BadRequestException(MSG_WEIGHT);
 		}
 		if (c.getWeightSum() <= 0) throw new BadRequestException(MSG_WEIGHT_ZERO);
+		if (c.isModelB()) {   // 모델 B (4차) : 영역마다 0~100 따로, 점수에는 비율로 (scoreExprB 가 Σw 로 나눈다). 합이 0 이면 분석 불가
+			int[] b = { c.getWeightH(), c.getWeightO(), c.getWeightR(), c.getWeightA() };
+			for (int v : b) {
+				if (v < 0 || v > 100) throw new BadRequestException(MSG_WEIGHT_B);
+			}
+			if (b[0] + b[1] + b[2] + b[3] <= 0) throw new BadRequestException(MSG_WEIGHT_B_ZERO);
+			// 건물 상태만 0 보다 크면 사용승인일이 없는 건물은 나눌 가중치가 0 (점수식은 그대로 두고 입력을 막는다)
+			if (b[0] + b[2] + b[3] <= 0) throw new BadRequestException(MSG_WEIGHT_B_ONLY_O);
+		}
 	}
 
 	// 건물의 구 코드 (없는 건물이면 null). 구청 계정 관할 확인용 (15단계 A)
@@ -203,13 +328,19 @@ public class MapService {
 
 	// 건물 상세 : 건물 + 점수 구성 + 거주자 집계
 	public BuildingDetailTO getBuildingDetail(AnalysisCriteriaTO c) {
+		prepareScale(c);
 		BuildingTO b = dao.getBuilding(c);
 		if (b == null) return null;
 		BuildingDetailTO d = new BuildingDetailTO();
 		d.setBuilding(b);
-		d.setScoreItems(buildScoreItems(b, c));
+		d.setScoreItems(c.isModelB() ? buildScoreItemsB(b, c) : buildScoreItems(b, c));   // B 는 영역 4개, legacy 는 4묶음 (섞지 않는다)
+		applyScale(b, c);
 		ResidentCountTO rc = residentService.getResidentCount(b.getBldId());
 		d.setResidents(rc);
+		if (c.isModelB()) {
+			d.setScenario(c.getScenarioB());
+			if (c.isScenCold()) d.setColdYearMax(AnalysisCriteriaTO.COLD_YEAR_MAX);
+		}
 		return d;
 	}
 
@@ -236,6 +367,47 @@ public class MapService {
 				{ "저가 주택" + (b.getPricePct() != null ? " (백분위 " + b.getPricePct() + "%)" : ""), b.getPtCheap(), c.isCheapOn(),
 					"저가 주택", b.getPricePct() != null ? "백분위 " + fmt(b.getPricePct()) + "%" : "자료 없음", "공시가 백분위 " + fmt(c.getCheapPct()) + "% 이하" } }));
 		return items;
+	}
+
+	/** 모델 B 점수 구성 = 영역 4개 (거처 특성 · 건물 상태 · 지형·재해 · 생활시설 접근성). 기여 점수 = 100 × 가중치 × 영역 값 ÷ 가중치 합 (연수를 모르면 건물 상태를 빼고 나머지로) */
+	private List<ScoreItemTO> buildScoreItemsB(BuildingTO b, AnalysisCriteriaTO c) {
+		List<ScoreItemTO> items = new ArrayList<>();
+		if (b.getUnits() == null || b.getUnits() <= 0) return items;   // 점수 대상 아님
+		Integer age = ageB(b.getUseaprDay());
+		boolean oMissing = b.getScoreO() == null;
+		double den = c.getWeightH() + (oMissing ? 0 : c.getWeightO()) + c.getWeightR() + c.getWeightA();
+		String sp = b.getSpType() == null || b.getSpType().isBlank() ? null : b.getSpType();
+		items.add(areaB("H", "거처 특성", c.getWeightH(), den, b.getScoreH(), b.getScoreH() != null && b.getScoreH() > 0 ? (b.getUgrndRes() == 1 ? "지하층 보유 주택" : "") + (b.getUgrndRes() == 1 && sp != null ? " · " : "") + (sp != null ? sp : "") : "해당 없음",
+				List.of(new ScoreFactorTO("지하층 보유 주택", b.getUgrndRes() == 1 ? "있음 (실제 거주 여부는 현장 확인 필요)" : "없음", "있으면 1", true, b.getUgrndRes() == 1),
+						new ScoreFactorTO("숙박형 거처", sp != null ? sp : "없음", "고시원 · 여관 · 여인숙이면 1", true, sp != null))));
+		items.add(areaB("O", "건물 상태", oMissing ? 0 : c.getWeightO(), den, b.getScoreO(), oMissing ? "사용승인일 없음 · 이 영역을 빼고 계산" : age + "년 경과",
+				List.of(new ScoreFactorTO("건물 연수", age != null ? age + "년 (기준 연도 2026)" : "사용승인일 없음", "30년 0 → 66년 이상 1", !oMissing, b.getScoreO() != null && b.getScoreO() > 0))));
+		double f = Math.min(1, b.getFloodCnt() / 5.0), t = b.getSlopeDeg() >= 15 ? Math.min(1, (b.getSlopeDeg() - 15) / 10.8) : 0;
+		if (c.isScenRain())   // 폭우 (2026-11-24) : 세 번째 영역 = 침수 기록 F 만 (경사는 점수에서 뺀다. 값은 참고로만 보여 준다)
+			items.add(areaB("F", "침수 기록", c.getWeightR(), den, b.getScoreR(), f > 0 ? b.getFloodCnt() + "개 연도 기록" : "침수 기록 없음",
+				List.of(new ScoreFactorTO("침수 기록 연도 수", b.getFloodCnt() + "개 연도", "5개 연도 이상 1 (연도 수 ÷ 5)", true, f > 0),
+						new ScoreFactorTO("경사 (참고)", String.format("%.1f°", b.getSlopeDeg()), "폭우 점수에는 넣지 않음", false, false))));
+		else items.add(areaB("R", "지형·재해", c.getWeightR(), den, b.getScoreR(), f == 0 && t == 0 ? "해당 없음" : (f >= t ? "침수 기록 연도 수 기준" : "경사 기준") + " (둘 중 큰 값)",
+				List.of(new ScoreFactorTO("침수 기록 연도 수", b.getFloodCnt() + "개 연도", "5개 연도 이상 1", true, f > 0),
+						new ScoreFactorTO("경사", String.format("%.1f°", b.getSlopeDeg()), "15° 부터, 25.8° 이상 1", true, t > 0))));
+		items.add(areaB("A", "생활시설 접근성", c.getWeightA(), den, b.getScoreA(), b.getScoreA() != null && b.getScoreA() > 0 ? "두 거리 값의 평균" : "해당 없음",
+				List.of(new ScoreFactorTO("버스정류장 거리", Math.round(b.getBusDist()) + "m", "500m 0 → 677.96m 이상 1", true, b.getBusDist() > 500),
+						new ScoreFactorTO("의료기관 거리", Math.round(b.getHospDist()) + "m", "750m 0 → 1,122.64m 이상 1", true, b.getHospDist() > 750))));
+		return items;
+	}
+
+	private static ScoreItemTO areaB(String key, String label, int w, double den, Double v, String summary, List<ScoreFactorTO> rows) {
+		double share = den > 0 ? w * 100.0 / den : 0, pts = v == null ? 0 : share * v;
+		ScoreItemTO it = new ScoreItemTO(key, label, (int) Math.round(pts), (int) Math.round(share), pts > 0, summary, summary, rows);
+		it.setPointsText(v == null ? null : String.format("+%.1f", pts));
+		return it;
+	}
+
+	/** 모델 B 연수 : 사용승인일 4 · 6 · 8자리 숫자, 연도 1900~2026 일 때만 (mapper-building ageExpr 와 같은 규칙) */
+	static Integer ageB(String d) {
+		if (d == null || !d.matches("\\d{4}(\\d{2}(\\d{2})?)?")) return null;
+		int y = Integer.parseInt(d.substring(0, 4));
+		return y >= 1900 && y <= 2026 ? 2026 - y : null;
 	}
 
 	/** members → 펼침 표의 요인 줄 */

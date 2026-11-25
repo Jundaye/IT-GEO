@@ -74,7 +74,7 @@
                     <span class="addr"><c:out value="${it.addr}"/></span>
                     <span class="leg"><span class="leg-from">${s.first ? '출발지에서 ' : '이전 지점에서 '}</span><span class="leg-min">${it.legMin}</span>분 <span class="leg-km">(${it.legKm}km)</span></span>
                   </div>
-                  <div class="sc"><b>${it.score}</b><small>취약도</small></div>
+                  <div class="sc"><b>${it.score}</b><small>취약도</small><c:choose><c:when test="${it.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose></div>
                   <div class="ck">
                     <c:choose>
                       <c:when test="${it.checked}"><span class="badge done">확인 완료</span></c:when>

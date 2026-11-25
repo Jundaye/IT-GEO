@@ -32,4 +32,6 @@ public class ScheduleItemTO {
 	// 하루 조회(api/mobile/schedule/day.do)에서만 채운다
 	private List<String> bldFactors;   // 건물 취약점
 	private List<String> hhVulns;      // 가구 취약점
+	// 저장 점수의 산식 : "b" = 점수 모델 B 환산 점수로 저장 (보관함 리스트 criteria JSON 의 model). null = 산식 정보 없이 저장된 기존 점수
+	private String scoreModel;
 }

@@ -39,6 +39,49 @@
 		+ <include refid="mapper-building.ptFlood"/> + <include refid="mapper-building.ptLow"/>
 		+ <include refid="mapper-building.ptCheap"/>) AS SIGNED)</sql>
 
+	<!-- ================================================================
+	     점수 모델 B (2026-11-23, app.analysis.model = b 일 때만. 기본 legacy 는 위 scoreExpr 그대로)
+	     대상 = units > 0 (48,463동). 영역 값은 0~1, 점수 = 100 × Σ(가중치 × 영역) ÷ Σ가중치, 소수 여섯째 자리 (Python 기준선 v5_00_baseline.py ROUND = 6).
+	     둘째 자리로 반올림하면 34.686165 → 34.69 처럼 환산 60점 경계(34.6875)를 넘는 건물이 생긴다 (7,136 ≠ 7,135). 화면 표시만 버림 정수
+	     연수를 모르면(ageExpr NULL) 건물 상태 O 를 빼고 나머지 세 영역으로. 기준 연도는 2026 고정 (YEAR(CURDATE()) 아님)
+	     숫자(30, 36, 5, 15, 10.8, 500, 177.96, 750, 372.64)는 분석 기준선 v5_00_baseline.py 와 같다. 바꾸지 말 것
+	     ================================================================ -->
+	<!-- 연수 : 사용승인일이 4 · 6 · 8자리 숫자이고 연도가 1900~2026 일 때만. SIGNED (UNSIGNED 면 연수 - 30 이 음수일 때 오류) -->
+	<sql id="ageExpr">(CASE WHEN b.useapr_day REGEXP '^[0-9]{4}([0-9]{2}([0-9]{2})?)?$'
+	          AND CAST(LEFT(b.useapr_day, 4) AS SIGNED) BETWEEN 1900 AND 2026
+	         THEN 2026 - CAST(LEFT(b.useapr_day, 4) AS SIGNED) END)</sql>
+	<!-- 거처 H : 지하층 보유(ugrnd_res = 1) 또는 숙박형 거처(sp_type 있음 : 고시원 · 여관 · 여인숙) -->
+	<sql id="bH">(CASE WHEN b.ugrnd_res = 1 OR NULLIF(b.sp_type, '') IS NOT NULL THEN 1 ELSE 0 END)</sql>
+	<!-- 건물 상태 O : (연수 - 30) / 36 을 0~1 로. 연수를 모르면 NULL -->
+	<sql id="bO">LEAST(1, GREATEST(0, (<include refid="mapper-building.ageExpr"/> - 30) / 36.0))</sql>
+	<!-- 지형·재해 R : 침수 기록 연도 수 / 5 와 경사((경사 - 15) / 10.8, 15도 미만이면 0) 중 큰 값 -->
+	<sql id="bR">GREATEST(LEAST(1, b.flood_cnt / 5.0),
+	         CASE WHEN b.slope_deg >= 15 THEN LEAST(1, (b.slope_deg - 15) / 10.8) ELSE 0 END)</sql>
+	<!-- 폭우 시나리오 F (2026-11-24) : 침수 기록 연도 수 / 5, 최대 1. 폭우에서만 R 대신 쓴다 (경사는 점수에서 뺌. 상세 속성 · 경사 조건 검색은 그대로) -->
+	<sql id="bF">LEAST(1, b.flood_cnt / 5.0)</sql>
+	<!-- 시나리오별 세 번째 영역 : 폭우 = F, 그 밖(기본 · 한파) = R. 파라미터는 AnalysisCriteriaTO (scenRain = 모델 B 이고 scenario = rain) -->
+	<sql id="bRS"><choose><when test="scenRain"><include refid="mapper-building.bF"/></when><otherwise><include refid="mapper-building.bR"/></otherwise></choose></sql>
+	<!-- 생활시설 접근성 A : 버스 (거리 - 500) / 177.96, 의료 (거리 - 750) / 372.64 를 각각 0~1 로 자른 평균 -->
+	<sql id="bA">((LEAST(1, GREATEST(0, (b.bus_dist - 500) / 177.96))
+	        + LEAST(1, GREATEST(0, (b.hosp_dist - 750) / 372.64))) / 2)</sql>
+	<!-- 점수 B (0~100, 소수 여섯째 자리). units > 0 이 아니면 NULL -->
+	<sql id="scoreExprB">(CASE WHEN b.units > 0 THEN ROUND(100 * (
+		    #{weightH} * <include refid="mapper-building.bH"/>
+		  + IFNULL(#{weightO} * <include refid="mapper-building.bO"/>, 0)
+		  + #{weightR} * <include refid="mapper-building.bRS"/>
+		  + #{weightA} * <include refid="mapper-building.bA"/>)
+		/ (#{weightH} + CASE WHEN <include refid="mapper-building.ageExpr"/> IS NULL THEN 0 ELSE #{weightO} END + #{weightR} + #{weightA}), 6) END)</sql>
+	<!-- 모델 B 영역 이름 (값이 0 보다 큰 영역, b = building). 현장확인 리스트 · 보관함 고르기 목록처럼 점수 조회가 없는 곳에서 쓴다 -->
+	<sql id="bAreaText">CONCAT_WS(' · ',
+		  IF(<include refid="mapper-building.bH"/> > 0, '거처 특성', NULL), IF(IFNULL(<include refid="mapper-building.bO"/>, 0) > 0, '건물 상태', NULL)
+		, IF(<include refid="mapper-building.bR"/> > 0, '지형·재해', NULL), IF(<include refid="mapper-building.bA"/> > 0, '생활시설 접근성', NULL))</sql>
+
+	<!-- 모델 B 환산 기준 (MapService.prepareScale) : 3개 구 점수 대상 전체에서 계산 점수 상위 300개. 구 · 동 · 화면 범위와 상관없이 전체에서 -->
+	<select id="getScoreTopB" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="double">
+		SELECT s.score FROM (SELECT <include refid="mapper-building.scoreExprB"/> score FROM building b WHERE b.units > 0) s
+		 ORDER BY s.score DESC LIMIT 300
+	</select>
+
 	<!-- 옥탑 거주 건물 = bld_resident_stat.rooftop_hh_cnt > 0 (04 에서 한 번 계산. residency 를 매번 훑지 않는다) -->
 	<sql id="statJoin">LEFT JOIN bld_resident_stat rs ON rs.bld_id = b.bld_id</sql>
 	<!-- 지역 조건 (gu = sgg_cd, dong = emd_nm, adm = adm_nm, adms = "법정동|행정동" 여러 개) -->
@@ -64,7 +107,20 @@
 		     , CEIL(<include refid="mapper-building.ptFlood"/>)   pt_flood
 		     , CEIL(<include refid="mapper-building.ptLow"/>)     pt_low
 		     , CEIL(<include refid="mapper-building.ptCheap"/>)   pt_cheap
-		     , <include refid="mapper-building.scoreExpr"/> score
+		     , <choose><when test="modelB"><include refid="mapper-building.scoreExprB"/></when><otherwise><include refid="mapper-building.scoreExpr"/></otherwise></choose> score
+		     <if test="modelB">
+		     , <include refid="mapper-building.bH"/> score_h
+		     , <include refid="mapper-building.bO"/> score_o
+		     , <include refid="mapper-building.bRS"/> score_r   /* 폭우 = F (침수 기록), 그 밖 = R (지형·재해) */
+		     <if test="scenCold and scaleBoundary != null">
+		     /* 한파 현장확인 (2026-11-24) : 기본 B 후보 중 사용승인 연도 &lt;= 1979 = Y, 후보인데 사용승인일 없음 = U (확인 불가), 그 밖 NULL */
+		     , CASE WHEN NOT (<include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary}) THEN NULL
+		            WHEN <include refid="mapper-building.ageExpr"/> IS NULL THEN 'U'
+		            WHEN <include refid="mapper-building.ageExpr"/> >= #{coldAgeMin} THEN 'Y' END cold_check
+		     </if>
+		     , <include refid="mapper-building.bA"/> score_a
+		     , (IFNULL(b.units, 0) > 0) score_target   /* 모델 B 분석 대상 여부 (units 가 NULL 이어도 대상 아님) */
+		     </if>
 		     , CASE WHEN b.useapr_day IS NOT NULL AND LENGTH(b.useapr_day) = 8
 		            THEN YEAR(CURDATE()) - CAST(LEFT(b.useapr_day, 4) AS UNSIGNED) END bld_age
 		     , IFNULL(rs.vuln_hh_cnt, 0)  vuln_hh_cnt
@@ -77,15 +133,38 @@
 		  <include refid="mapper-building.statJoin"/>
 		  <include refid="mapper-building.checkedJoin"/>
 		 WHERE 1 = 1
+		 <!-- 모델 B : 분석 대상(units > 0)만 지도 · 후보 목록 · 집계에. 아래는 대상이 아니어도 보여 준다 (점수 NULL → 화면 "분석 대상 아님")
+		      건물 하나 상세(bldId), 일반 주소 검색(q), 보관함 목록(archiveScope : 이미 저장한 건물은 그대로 보여야 함) -->
+		 <if test="scoreTargetOnly">AND b.units > 0</if>
+		 <if test="filterOn"><include refid="mapper-building.filterWhereB"/></if>
 		 <include refid="mapper-building.areaWhere"/>
 	</sql>
 
+	<!-- 모델 B 조건별 조회 (2026-11-23 4차, AnalysisCriteriaTO.filter*). 고른 조건을 모두 충족(AND). 점수 · 가중치 · 환산 기준(getScoreTopB = 3개 구 전체 300번째)은 그대로이고 보기만 좁힌다.
+	     우선확인 후보 = 계산 점수 >= 지금 가중치의 3개 구 전체 300번째 점수 (MapService.prepareScale 이 넣은 scaleBoundary). 조건 · 지역 안에서 300위를 다시 구하지 않는다 -->
+	<sql id="filterWhereB">
+		<if test="filterUgrnd">AND b.ugrnd_res = 1</if>
+		<if test="filterLodging">AND b.sp_type IN ('고시원', '여관', '여인숙')</if>
+		<if test="filterFloodMin != null">AND b.flood_cnt >= #{filterFloodMin}</if>
+		<if test="filterAgeMin != null">AND <include refid="mapper-building.ageExpr"/> >= #{filterAgeMin}</if>
+		<if test="filterSlopeMin != null">AND b.slope_deg > #{filterSlopeMin}</if>
+		<if test="filterViol">AND b.viol_yn = '1'</if>
+		<if test="filterLowElev != null">AND b.elev_m &lt;= #{filterLowElev}</if>
+		<if test="filterCheapPct != null">AND b.price_pct IS NOT NULL AND b.price_pct &lt;= #{filterCheapPct}</if>
+		<if test="filterCand and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary}</if>
+		<!-- 한파 [한파 현장확인만] : 기본 B 후보 ∩ 사용승인 연도 <= 1979 (ageExpr >= 2026 - 1979). 사용승인일이 없는 후보(확인 불가)는 [전체 보기]에서만 -->
+		<if test="coldFilter and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary} AND <include refid="mapper-building.ageExpr"/> >= #{coldAgeMin}</if>
+	</sql>
+
 	<!-- "지하층 · 노후 · 침수" (바깥 쿼리, t 기준) -->
-	<sql id="factorText">CONCAT_WS(' · ',
+	<!-- 결과 리스트 한 줄 요인 문구. legacy = 요인 이름, 모델 B = 값이 0 보다 큰 영역 이름 (두 체계를 섞지 않는다) -->
+	<sql id="factorText"><choose><when test="modelB">CONCAT_WS(' · ',
+		  IF(t.score_h > 0, '거처 특성', NULL), IF(t.score_o > 0, '건물 상태', NULL)
+		, IF(t.score_r > 0, <choose><when test="scenRain">'침수 기록'</when><otherwise>'지형·재해'</otherwise></choose>, NULL), IF(t.score_a > 0, '생활시설 접근성', NULL))</when><otherwise>CONCAT_WS(' · ',
 		  IF(t.pt_ugrnd   > 0, '지하층', NULL), IF(t.pt_gosiwon > 0, '고시원', NULL)
 		, IF(t.pt_rooftop > 0, '옥탑', NULL),   IF(t.pt_viol    > 0, '위반건축물', NULL)
 		, IF(t.pt_old     > 0, '노후', NULL),   IF(t.pt_flood   > 0, '침수', NULL)
-		, IF(t.pt_low     > 0, '저지대', NULL), IF(t.pt_cheap   > 0, '저가', NULL))</sql>
+		, IF(t.pt_low     > 0, '저지대', NULL), IF(t.pt_cheap   > 0, '저가', NULL))</otherwise></choose></sql>
 
 	<!-- 구·동 선택 목록 -->
 	<!-- 법정동 목록 (+ 건물 범위). gu 가 있으면 그 구만 -->
@@ -121,11 +200,22 @@
 	</select>
 
 	<!-- 구 단위 요약 : 구마다 전체 · 기준점 이상 건물 수 ("위험 N곳") -->
+	<!-- 구 요약 : scoredSelect 를 감싸지 않고 구별로 바로 집계 (2026-11-25, 팀원 최적화).
+	     점수식 · 조인 · WHERE 는 scoredSelect 와 같아야 한다 (모델 B · 폭우 bRS · 한파 coldFilter · 조건별 검색 filterWhereB · 지역 areaWhere · legacy scoreExpr).
+	     scoredSelect 를 바꾸면 여기도 같이 바꿀 것 -->
 	<select id="getGuSummary" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.GuTO">
-		SELECT t.sgg_cd, AVG(t.lat) lat, AVG(t.lng) lng, COUNT(*) total, SUM(t.score >= #{scoreMin}) risk_count, SUM(t.checked) checked_cnt
-		  FROM (<include refid="mapper-building.scoredSelect"/>) t
-		 GROUP BY t.sgg_cd
-		 ORDER BY t.sgg_cd
+		SELECT b.sgg_cd, AVG(b.lat) lat, AVG(b.lng) lng, COUNT(*) total
+		     , SUM(<choose><when test="modelB"><include refid="mapper-building.scoreExprB"/></when><otherwise><include refid="mapper-building.scoreExpr"/></otherwise></choose> >= #{scoreMinRaw}) risk_count
+		     , SUM(<include refid="mapper-building.checkedExists"/>) checked_cnt
+		  FROM building b
+		  <include refid="mapper-building.statJoin"/>
+		  <include refid="mapper-building.checkedJoin"/>
+		 WHERE 1 = 1
+		 <if test="scoreTargetOnly">AND b.units > 0</if>
+		 <if test="filterOn"><include refid="mapper-building.filterWhereB"/></if>
+		 <include refid="mapper-building.areaWhere"/>
+		 GROUP BY b.sgg_cd
+		 ORDER BY b.sgg_cd
 	</select>
 
 	<!-- 격자 묶음 (살피구로 AnalysisService.clusters() 와 같은 결과를 SQL 로)
@@ -135,15 +225,15 @@
 		SELECT FLOOR(t.lng / #{cell})    ix
 		     , FLOOR(t.lat / #{cellLat}) iy
 		     , COUNT(*)                  size
-		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMin} THEN t.lng END), AVG(t.lng)) lng   /* 도넛 위치 = 기준점 이상 건물들의 평균 (없으면 전체 평균) */
-		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMin} THEN t.lat END), AVG(t.lat)) lat
-		     , SUM(t.score >= #{scoreMin}) risk_count
+		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMinRaw} THEN t.lng END), AVG(t.lng)) lng   /* 도넛 위치 = 기준점 이상 건물들의 평균 (없으면 전체 평균) */
+		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMinRaw} THEN t.lat END), AVG(t.lat)) lat
+		     , SUM(t.score >= #{scoreMinRaw}) risk_count
 		     , SUM(t.checked)            checked_cnt
 		     , MAX(t.score)              max_score
-		     , SUM(t.score >= 80)                       h_red
-		     , SUM(t.score >= 60 AND t.score &lt; 80)   h_orange
-		     , SUM(t.score >= 40 AND t.score &lt; 60)   h_yellow
-		     , SUM(t.score &lt; 40)                     h_green
+		     , SUM(t.score >= #{band80Raw})                          h_red
+		     , SUM(t.score >= #{band60Raw} AND t.score &lt; #{band80Raw}) h_orange
+		     , SUM(t.score >= #{band40Raw} AND t.score &lt; #{band60Raw}) h_yellow
+		     , SUM(t.score &lt; #{band40Raw})                        h_green
 		     , MIN(t.lng) min_lng, MIN(t.lat) min_lat, MAX(t.lng) max_lng, MAX(t.lat) max_lat
 		     , MAX(t.bld_id) one_bld_id, MAX(t.bld_nm) one_bld_nm, MAX(t.addr) one_addr, MAX(t.use_nm) one_use_nm
 		  FROM (
@@ -186,14 +276,27 @@
 			<include refid="mapper-building.bboxWhere"/>
 			<if test="q != null and q != ''">AND (b.addr LIKE CONCAT('%', #{q}, '%') OR b.bld_nm LIKE CONCAT('%', #{q}, '%'))</if>
 		  ) t
-		 <!-- 검색어(q)가 있으면 점수 기준을 무시하고 주소 · 건물명으로 찾는다 (15단계 C-9). 기준 미만은 화면이 "기준 미만" 으로 표시 -->
-		 <where><if test="q == null or q == ''">t.score >= #{scoreMin}</if></where>
+		 <!-- 검색어(q)가 있으면 점수 기준을 무시하고 주소 · 건물명으로 찾는다 (15단계 C-9). 기준 미만은 화면이 "기준 미만" 으로 표시.
+		      모델 B 는 기준점으로 자르지 않고 조건별 조회(filterWhereB, [우선확인 후보만 보기] 포함)로만 좁힌다 (지도 · 집계와 같은 건수) -->
+		 <where><if test="listByScore and (q == null or q == '')">t.score >= #{scoreMinRaw}</if></where>
+	</select>
+
+	<!-- 모델 B 결과 리스트 건수 (5차) : 조건 충족 전체(match_cnt)와 그중 우선확인 후보(cand_cnt)를 한 번에. MapService 가 filterCand 를 끄고 부른다.
+	     후보 = 계산 점수 >= 3개 구 전체 300번째(scaleBoundary) = filterWhereB 의 filterCand 와 같은 식 -->
+	<select id="getResultCountB" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="map">
+		SELECT COUNT(*) match_cnt
+		     , <choose><when test="scaleBoundary != null">IFNULL(SUM(t.score >= #{scaleBoundary}), 0)</when><otherwise>COUNT(*)</otherwise></choose> cand_cnt
+		     <if test="scenCold and scaleBoundary != null">, IFNULL(SUM(t.cold_check = 'Y'), 0) cold_cnt, IFNULL(SUM(t.cold_check = 'U'), 0) cold_unknown_cnt</if>
+		  FROM (
+			<include refid="mapper-building.scoredSelect"/>
+			<include refid="mapper-building.bboxWhere"/>
+		  ) t
 	</select>
 
 	<!-- 결과 리스트 : 한 페이지 -->
 	<select id="getResultList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.BuildingTO">
 		SELECT t.bld_id, t.sgg_cd, t.emd_nm, t.addr, t.bld_nm, t.use_nm, t.grnd_flr, t.ugrnd_flr, t.lat, t.lng
-		     , t.score, t.bld_age, t.vuln_hh_cnt, t.priority_sum
+		     , t.score, t.bld_age, t.vuln_hh_cnt, t.priority_sum, t.units<if test="modelB">, t.score_target</if><if test="scenCold and scaleBoundary != null">, t.useapr_day, t.cold_check</if>
 		     , t.pt_ugrnd, t.pt_gosiwon, t.pt_rooftop, t.pt_viol, t.pt_old, t.pt_flood, t.pt_low, t.pt_cheap
 		     , <include refid="mapper-building.factorText"/> factor_text
 		  FROM (
@@ -201,8 +304,9 @@
 			<include refid="mapper-building.bboxWhere"/>
 			<if test="q != null and q != ''">AND (b.addr LIKE CONCAT('%', #{q}, '%') OR b.bld_nm LIKE CONCAT('%', #{q}, '%'))</if>
 		  ) t
-		 <!-- 검색어(q)가 있으면 점수 기준을 무시하고 주소 · 건물명으로 찾는다 (15단계 C-9). 기준 미만은 화면이 "기준 미만" 으로 표시 -->
-		 <where><if test="q == null or q == ''">t.score >= #{scoreMin}</if></where>
+		 <!-- 검색어(q)가 있으면 점수 기준을 무시하고 주소 · 건물명으로 찾는다 (15단계 C-9). 기준 미만은 화면이 "기준 미만" 으로 표시.
+		      모델 B 는 기준점으로 자르지 않고 조건별 조회(filterWhereB, [우선확인 후보만 보기] 포함)로만 좁힌다 (지도 · 집계와 같은 건수) -->
+		 <where><if test="listByScore and (q == null or q == '')">t.score >= #{scoreMinRaw}</if></where>
 		 ORDER BY
 		 <choose>
 		 	<when test="sort == 'old'">t.bld_age DESC, t.score DESC, t.vuln_hh_cnt DESC, t.priority_sum DESC, t.bld_id</when>

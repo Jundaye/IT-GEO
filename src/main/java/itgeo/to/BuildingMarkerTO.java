@@ -8,7 +8,9 @@ public class BuildingMarkerTO {
 	private String bldId;
 	private double lat;
 	private double lng;
-	private int score;
+	private double score;   // legacy 는 정수값, 모델 B 는 환산 점수 (소수 유지)
+	private Double rawScore;       // 모델 B : 계산 점수
+	private Integer displayScore;  // 모델 B : 화면 표시 (환산 점수 버림)
 	private int vulnHhCnt;      // 취약 가구 수 (툴팁)
 	private String bldNm;
 	private String addr;

@@ -85,13 +85,15 @@
 		     , b.addr, b.bld_nm, b.use_nm, b.emd_nm, b.sgg_cd, b.useapr_day, b.grnd_flr, b.ugrnd_flr, b.lat, b.lng
 		     , b.welf_nm, b.welf_dist, b.hosp_nm, b.hosp_dist
 		     , CAST(f.vulnerability_score AS SIGNED) score
-		     , CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL)
-		                      , IF(b.flood_cnt >= 1, '침수', NULL), IF(b.elev_m &lt;= 15, '저지대', NULL)) factor_text
+		     , <include refid="mapper-archive.savedModelExpr"/> score_model
+		     , <choose><when test="@itgeo.to.AnalysisCriteriaTO@modelBConfig()"><include refid="mapper-building.bAreaText"/></when><otherwise>CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL)
+		                      , IF(b.flood_cnt >= 1, '침수', NULL), IF(b.elev_m &lt;= 15, '저지대', NULL))</otherwise></choose> factor_text
 		     , (SELECT DATE_FORMAT(MAX(r.created_at), '%Y-%m-%d %H:%i') FROM survey_record r WHERE r.plan_id = p.plan_id) checked_at
 		     , (SELECT v.result FROM survey_record r JOIN visit_history v ON v.visit_id = r.visit_id WHERE r.plan_id = p.plan_id ORDER BY r.record_id DESC LIMIT 1) check_result
 		     , (SELECT r.content FROM survey_record r WHERE r.plan_id = p.plan_id ORDER BY r.record_id DESC LIMIT 1) check_content
 		  FROM survey_plan p
 		  JOIN vulnerability_factor f ON f.factor_id = p.factor_id
+		  JOIN vulnerability_list l ON l.vulnerability_id = f.vulnerability_id
 		  JOIN building b ON b.bld_id = f.bld_id
 		 WHERE p.survey_id = #{surveyId}
 		 ORDER BY p.visit_order IS NULL, p.visit_order, p.plan_id
@@ -145,8 +147,9 @@
 	<select id="getPickList" resultType="itgeo.to.ArchiveRowTO">
 		SELECT f.factor_id, f.vulnerability_id, l.title, f.bld_id, b.sgg_cd, b.emd_nm, b.addr, b.bld_nm, b.use_nm, b.lat, b.lng
 		     , CAST(f.vulnerability_score AS SIGNED) score
+		     , <include refid="mapper-archive.savedModelExpr"/> score_model
 		     , IFNULL(rs.vuln_hh_cnt, 0) vuln_hh_cnt, IFNULL(rs.priority_sum, 0) priority_sum
-		     , CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL)) factor_text
+		     , <choose><when test="@itgeo.to.AnalysisCriteriaTO@modelBConfig()"><include refid="mapper-building.bAreaText"/></when><otherwise>CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL))</otherwise></choose> factor_text
 		     , DATE_FORMAT(f.evaluated_at, '%Y-%m-%d') saved_at
 		     , <include refid="mapper-archive.scenExpr"/> scen_key
 		     , CASE WHEN JSON_VALID(l.criteria) THEN JSON_UNQUOTE(JSON_EXTRACT(l.criteria, '$.scenario')) END scen_base

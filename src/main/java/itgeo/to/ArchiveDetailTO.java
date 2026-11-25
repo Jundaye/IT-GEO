@@ -40,7 +40,7 @@ public class ArchiveDetailTO {
 
 	/** 저장 점수 (보관함에 없으면 현재 점수) */
 	public int getSavedScore() {
-		return factor != null && factor.getVulnerabilityScore() != null ? factor.getVulnerabilityScore() : building.getScore();
+		return factor != null && factor.getVulnerabilityScore() != null ? factor.getVulnerabilityScore() : building.getDisplayScore() != null ? building.getDisplayScore() : (int) Math.round(building.getScore());   // 모델 B = 환산 점수 버림 정수
 	}
 	public int getAdjustedScore() { return getSavedScore() + scoreAdj; }
 	public String getAdjText() { return (scoreAdj >= 0 ? "+" : "") + scoreAdj; }

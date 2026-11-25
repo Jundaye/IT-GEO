@@ -68,10 +68,18 @@
 	</insert>
  
 	<!-- ===== 보관함 목록 (archive.do) : 파라미터 AnalysisCriteriaTO (userId, status, gu, dong, q, sort, page, size + 기본 기준값) ===== -->
+	<!-- 저장 점수의 산식 (DB 구조는 그대로). 모델 B 로 저장할 때 ArchiveService 가 리스트 criteria JSON 에 "model":"b" 를 넣는다.
+	     그 표시가 없으면 산식 정보 없이 저장된 기존 점수 → NULL (어느 산식인지 단정하지 않는다). l = vulnerability_list -->
+	<sql id="savedModelExpr">(CASE WHEN JSON_VALID(l.criteria) AND JSON_UNQUOTE(JSON_EXTRACT(l.criteria, '$.model')) = 'b' THEN 'b' END)</sql>
+	<!-- 모델 B 저장 점수의 계산 기준 (2026-11-24 기상 시나리오) : "B 기본" | "B 폭우" | "B 기본 + 한파 현장확인 표시". ArchiveService.criteriaB 가 넣는다. 그 전 저장분은 NULL -->
+	<sql id="savedBasisExpr">(CASE WHEN JSON_VALID(l.criteria) THEN JSON_UNQUOTE(JSON_EXTRACT(l.criteria, '$.scoreBasis')) END)</sql>
+
 	<sql id="archiveRows">
 		SELECT f.factor_id, f.vulnerability_id, l.title, f.bld_id
 		     , t.sgg_cd, t.emd_nm, t.addr, t.bld_nm, t.use_nm, t.lat, t.lng
 		     , CAST(f.vulnerability_score AS SIGNED) score
+		     , <include refid="mapper-archive.savedModelExpr"/> score_model
+		     , <include refid="mapper-archive.savedBasisExpr"/> score_basis
 		     , t.vuln_hh_cnt, t.priority_sum
 		     , <include refid="mapper-building.factorText"/> factor_text
 		     , DATE_FORMAT(f.evaluated_at, '%Y-%m-%d') saved_at
@@ -101,10 +109,10 @@
 		 <if test="q != null and q != ''">AND (t.addr LIKE CONCAT('%', #{q}, '%') OR t.bld_nm LIKE CONCAT('%', #{q}, '%'))</if>
 		 <!-- ===== [상세 필터] (5-1). 요인 키는 ArchiveService 가 허용 목록으로 걸러서 ${} 로 열 이름에 쓴다 ===== -->
 		 <if test="factors != null and factors.size() > 0 and factorMode == 'any'">
-		   AND (<foreach collection="factors" item="k" separator=" OR ">t.pt_${k} > 0</foreach>)
+		   AND (<foreach collection="factors" item="k" separator=" OR "><choose><when test="modelB">t.score_${k} > 0</when><otherwise>t.pt_${k} > 0</otherwise></choose></foreach>)
 		 </if>
 		 <if test="factors != null and factors.size() > 0 and factorMode != 'any'">
-		   AND (<foreach collection="factors" item="k" separator=" AND ">t.pt_${k} > 0</foreach>)
+		   AND (<foreach collection="factors" item="k" separator=" AND "><choose><when test="modelB">t.score_${k} > 0</when><otherwise>t.pt_${k} > 0</otherwise></choose></foreach>)
 		 </if>
 		 <if test="bands != null and bands.size() > 0">
 		   AND (<foreach collection="bands" item="bd" separator=" OR ">
@@ -178,6 +186,8 @@
 	<select id="getFactorByBld" resultType="itgeo.to.ArchiveTO">
 		SELECT f.factor_id, f.vulnerability_id, f.bld_id
 		     , CAST(f.vulnerability_score AS SIGNED) vulnerability_score, f.vulnerability_grade
+		     , <include refid="mapper-archive.savedModelExpr"/> score_model
+		     , <include refid="mapper-archive.savedBasisExpr"/> score_basis
 		     , DATE_FORMAT(f.evaluated_at, '%Y-%m-%d') evaluated_at
 		     , l.title, l.user_id, l.sgg_cd
 		  FROM vulnerability_factor f
@@ -279,4 +289,4 @@
 	</select>
  
 </mapper>
- 
+ 

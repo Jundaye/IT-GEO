@@ -12,6 +12,7 @@ window.MapLayer = (function () {
   var C = window.MAP_CONFIG;
   var STEP = C.WEIGHT_STEP || 5;
   var weights = {};      // 묶음 key → 설정값 0~100 (합은 상관없음)
+  var bw = {};           // 모델 B : 영역 key(H O R A) → 입력값 0~100 (합은 상관없음, 비율로 반영)
   var onRun = null, onToggle = null, onChange = null;
 
   function factorOf(key) {
@@ -57,6 +58,7 @@ window.MapLayer = (function () {
   function fmtPt(v) { var r = Math.round(v * 10) / 10; return (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1)); }
 
   function refreshWeights() {
+    if (C.MODEL_B) return;                                           // 모델 B 는 refreshB
     var sum = weightSum();
     C.WEIGHT_GROUPS.forEach(function (g) {
       var w = weights[g.key] || 0, lk = locked(g);
@@ -82,9 +84,108 @@ window.MapLayer = (function () {
     refreshWeights();
   }
 
+  /* ---------- 모델 B (4차) : 영역 4개, 영역마다 0~100 따로. 실제 적용 비율 = 입력값 ÷ 합 × 100 (서버 scoreExprB 가 같은 비율로 계산) ---------- */
+  function bSum() { return C.B_WEIGHTS.reduce(function (s, g) { return s + (bw[g.key] || 0); }, 0); }
+  function bShare(k) { var s = bSum(); return s > 0 ? (bw[k] || 0) * 100 / s : 0; }
+  function fmtPct(v) { var r = Math.round(v * 100) / 100; return (r % 1 === 0 ? r.toFixed(0) : r.toFixed(2).replace(/0$/, '')) + '%'; }
+  /* 분석할 수 없는 입력이면 안내 문구 (서버 MapService.assertWeights 와 같은 규칙) */
+  function bProblem() {
+    if (bSum() <= 0) return '영역 가중치를 하나 이상 0보다 크게 해 주세요';
+    if ((bw.H || 0) + (bw.R || 0) + (bw.A || 0) <= 0) return '건물 상태만으로는 분석할 수 없어요 (사용승인일이 없는 건물이 있음). 다른 영역도 하나 이상 0보다 크게 해 주세요';
+    return null;
+  }
+  /* 기상 시나리오 (2026-11-24) : 폭우 · 한파는 고정 프리셋. 팝업 · 요약에는 고정 기준을 보여 주되 bw(기본 모드 입력값)는 건드리지 않는다 → 기본으로 돌아오면 그대로 */
+  var scenB = 'base';
+  function fixedB() { return C.B_SCEN && C.B_SCEN[scenB] ? C.B_SCEN[scenB] : null; }
+  function setScenB(k) { scenB = k || 'base'; refreshB(); }
+  function refreshFixedB(fx) {
+    var w = fx.weights, sum = C.B_WEIGHTS.reduce(function (s, g) { return s + (w[g.key] || 0); }, 0);
+    C.B_WEIGHTS.forEach(function (g) {
+      var $r = $('#wb-' + g.key).val(w[g.key]).prop('disabled', true); fill($r);
+      $('#wbv-' + g.key).html(w[g.key] + ' <i>→ ' + fmtPct(sum > 0 ? w[g.key] * 100 / sum : 0) + '</i>');
+      var $nm = $('.wp-row[data-bw="' + g.key + '"] .wp-name');
+      if (g.key === 'R') $nm.html(Common.esc(fx.rLabel || g.label) + ' <small>' + Common.esc(fx.rNote || '침수 기록 연도 수 · 경사') + '</small>');
+    });
+    $('.wp-row[data-bw]').addClass('fixed');
+    $('#weightReset').prop('disabled', true);
+    $('#wbSum').removeClass('warn').text(fx.name + ' 시나리오 고정 기준 · 기본 모드에서 정한 입력값은 그대로 보관됩니다');
+    $('#bwSummary').text(fx.name + ' 고정 : ' + C.B_WEIGHTS.map(function (g) { return (g.key === 'R' && fx.rLabel ? fx.rLabel : g.label) + ' ' + fmtPct(sum > 0 ? w[g.key] * 100 / sum : 0); }).join(' · '));
+    $('#btnRun').prop('disabled', false);
+  }
+  function refreshB() {
+    var fx = fixedB();
+    if (fx) { refreshFixedB(fx); return; }
+    $('.wp-row[data-bw]').removeClass('fixed');
+    $('#weightReset').prop('disabled', false);
+    $('.wp-row[data-bw="R"] .wp-name').html('지형·재해 <small>침수 기록 연도 수 · 경사</small>');
+    C.B_WEIGHTS.forEach(function (g) { $('#wb-' + g.key).prop('disabled', false); });
+    var sum = bSum(), bad = bProblem();
+    C.B_WEIGHTS.forEach(function (g) {
+      var $r = $('#wb-' + g.key).val(bw[g.key]); fill($r);
+      $('#wbv-' + g.key).html(bw[g.key] + ' <i>→ ' + fmtPct(bShare(g.key)) + '</i>');
+    });
+    $('#wbSum').toggleClass('warn', !!bad).text(bad || '적용 비율 = 입력값 ÷ 합계 ' + sum + ' × 100');
+    $('#bwSummary').text(bad ? '분석 불가 (가중치 확인)' : C.B_WEIGHTS.map(function (g) { return g.label + ' ' + fmtPct(bShare(g.key)); }).join(' · '));
+    $('#btnRun').prop('disabled', !!bad);
+  }
+  /* 영역 하나의 입력값만 바꾼다 (0~100, B_STEP 단위). 다른 영역 입력값은 그대로 */
+  function setB(key, v) {
+    if (fixedB()) { refreshB(); return; }                            // 고정 프리셋 중에는 입력값을 바꾸지 않는다
+    bw[key] = Math.max(C.B_MIN, Math.min(C.B_MAX, Math.round((Number(v) || 0) / C.B_STEP) * C.B_STEP));
+    refreshB();
+  }
+  function resetB() { C.B_WEIGHTS.forEach(function (g) { bw[g.key] = g.def; }); refreshB(); }
+
+  /* ---------- 모델 B 조건별 조회 ([data-bf] 행). 점수 · 가중치와 따로 ---------- */
+  function bfOf(key) { return (C.B_FILTERS || []).filter(function (f) { return f.key === key; })[0]; }
+  function refreshBf($row) {
+    var f = bfOf($row.data('bf'));
+    if (!f) return;
+    $row.toggleClass('off', !$row.find('.bf-chk').is(':checked'));
+    var $rng = $row.find('.bf-rng');
+    if ($rng.length) { if (f.fmt) $row.find('.f-val').text(f.fmt($rng.val())); fill($rng); }
+  }
+  function bfCount() {
+    var n = $('[data-bf] .bf-chk:checked').length;
+    $('#bfCount').text(n + '개 적용').prop('hidden', n === 0);
+  }
+  /* 조회 범위 (5차) : 'cand' = 우선확인 후보만 (filterCand) / 'all' = 전체 분석 대상. 왼쪽 패널 · 지도 아래 [data-scope] 두 칸이 같은 값.
+     사용자가 고른 값은 [조건 모두 해제] · 분석 실행 · 지도 이동 · 가중치 초기화로 바뀌지 않는다 (바꾸는 곳은 setCand 하나) */
+  var scopeCand = true;
+  function isCand() { return scopeCand; }
+  function setCand(on) {
+    scopeCand = !!on;
+    $('[data-scope]').each(function () {
+      var me = $(this).attr('data-scope') === (scopeCand ? 'cand' : 'all');
+      $(this).toggleClass('on', me).attr('aria-pressed', String(me));
+    });
+  }
+  function resetBf() {
+    $('[data-bf]').each(function () {
+      var $row = $(this), f = bfOf($row.data('bf'));
+      if (!f) return;
+      $row.find('.bf-chk').prop('checked', false);
+      var $rng = $row.find('.bf-rng');
+      if ($rng.length) $rng.val(f.def);
+      refreshBf($row);
+    });
+    bfCount();
+  }
+
   /* 현재 패널 상태 → 서버 파라미터 (요인 on/off · 기준값 · 묶음 가중치 설정값 4개, 꺼진 묶음은 0 으로 보냄) */
   function getCriteria() {
     var p = { scoreMin: C.SCORE_MIN };
+    if (C.MODEL_B) {                                                 // 모델 B : 영역 가중치 입력값 + 조건별 조회 (옛 요인 · 묶음 가중치는 보내지 않는다 → 서버 기본값)
+      C.B_WEIGHTS.forEach(function (g) { p['weight' + g.key] = bw[g.key]; });
+      (C.B_FILTERS || []).forEach(function (f) {
+        var $row = $('[data-bf="' + f.key + '"]');
+        if (!$row.find('.bf-chk').is(':checked')) return;            // 체크 안 한 조건은 보내지 않는다 (= 조건 없음)
+        var $rng = $row.find('.bf-rng');
+        p[f.param] = $rng.length ? Number($rng.val()) : true;
+      });
+      if (scopeCand) p.filterCand = true;                            // 조회 범위 (조건 개수 배지에는 세지 않는다)
+      return p;
+    }
     C.FACTORS.forEach(function (f) {
       var $row = $('[data-factor="' + f.key + '"]');
       p[f.key + 'On'] = $row.find('.f-chk').is(':checked');
@@ -113,6 +214,7 @@ window.MapLayer = (function () {
    *   이벤트를 내지 않으므로 "수정됨" 이 붙지 않는다
    */
   function applyPreset(p) {
+    if (C.MODEL_B) { $('#btnRun').removeClass('dirty'); return; }  // 모델 B : 시나리오가 점수 · 가중치를 바꾸지 않는다 (폭우 · 폭염 · 한파는 준비 중)
     p = p || {};
     var want = p.factors || C.FACTORS.filter(function (f) { return f.on; }).map(function (f) { return f.key; });
     C.FACTORS.forEach(function (f) {
@@ -152,7 +254,27 @@ window.MapLayer = (function () {
       if ($rng.length) $rng.attr({ min: f.min, max: f.max, step: f.step }).val(f.def);
       refreshRow($row);
     });
-    resetWeights();
+    if (C.MODEL_B) {
+      resetB();
+      C.B_WEIGHTS.forEach(function (g) {
+        $('#wb-' + g.key).attr({ min: C.B_MIN, max: C.B_MAX, step: C.B_STEP }).on('input change', function () { setB(g.key, this.value); dirty(); });
+      });
+      /* 조건별 조회 행 */
+      $('[data-bf]').each(function () {
+        var f = bfOf($(this).data('bf')), $rng = $(this).find('.bf-rng');
+        if (f && $rng.length) $rng.attr({ min: f.min, max: f.max, step: f.step });
+      });
+      resetBf();
+      setCand(C.RISK_ONLY);
+      $('.layer-panel').on('change', '.bf-chk', function () { refreshBf($(this).closest('[data-bf]')); bfCount(); dirty(); });
+      /* 기준값을 움직이면 그 조건을 켠 것으로 본다 */
+      $('.layer-panel').on('input change', '.bf-rng', function () {
+        var $row = $(this).closest('[data-bf]');
+        $row.find('.bf-chk').prop('checked', true);
+        refreshBf($row); bfCount(); dirty();
+      });
+      $('#bfReset').on('click', function () { resetBf(); dirty(); });
+    } else resetWeights();
 
     $('.layer-panel').on('change input', '.f-rng', function () { refreshRow($(this).closest('[data-factor]')); dirty(); });
     $('.layer-panel').on('change', '.f-chk', function () {
@@ -170,7 +292,7 @@ window.MapLayer = (function () {
     /* 가중치 팝업 */
     $('#btnWeights').on('click', function () { $('#weightPop').toggleClass('open'); });
     $('#weightClose').on('click', function () { $('#weightPop').removeClass('open'); });
-    $('#weightReset').on('click', function () { resetWeights(); dirty(); });
+    $('#weightReset').on('click', function () { if (C.MODEL_B && fixedB()) return; if (C.MODEL_B) resetB(); else resetWeights(); dirty(); });
     C.WEIGHT_GROUPS.forEach(function (g) {
       $('#w-' + g.key).attr({ min: 0, max: 100, step: STEP }).on('input change', function () {
         setWeight(g.key, this.value);
@@ -196,5 +318,5 @@ window.MapLayer = (function () {
     });
   }
 
-  return { init: init, getCriteria: getCriteria, applyPreset: applyPreset };
+  return { init: init, getCriteria: getCriteria, applyPreset: applyPreset, isCand: isCand, setCand: setCand, setScenB: setScenB };
 })();

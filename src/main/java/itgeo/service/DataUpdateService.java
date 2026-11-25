@@ -4,6 +4,7 @@ import java.net.SocketTimeoutException;
 import java.util.Collections;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,11 @@ public class DataUpdateService {
 
 	private final RestTemplate rest;
 
+	@Autowired
+	MapService mapService;
+
+	private volatile String clearedJobId;   // 같은 작업으로 여러 번 비우지 않게
+
 	public DataUpdateService() {
 		SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
 		f.setConnectTimeout(CONNECT_MS);
@@ -58,7 +64,14 @@ public class DataUpdateService {
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> job(String id) {
 		try {
-			return rest.getForObject(batchUrl + "/pipeline/jobs/{id}", Map.class, id);
+			Map<String, Object> s = rest.getForObject(batchUrl + "/pipeline/jobs/{id}", Map.class, id);
+			/* 작업이 끝났으면(running 이 아님 : 완료 · error) 지도 캐시(동 목록 · 구 경계 · 모델 B 환산 기준)를 한 번 비운다.
+			   error 도 비운다 : 중간까지 DB 가 바뀌었을 수 있고, 비우기는 다시 계산할 뿐이라 성공으로 보지 않는다 (응답은 그대로 넘김) */
+			if (s != null && s.get("status") != null && !"running".equals(s.get("status")) && !id.equals(clearedJobId)) {
+				clearedJobId = id;
+				mapService.clearCache();
+			}
+			return s;
 		} catch (Exception e) {
 			throw toBatch(e, null, "작업 기록이 없습니다. 다시 실행해 주세요.");   // 404 = 배치 서버가 다시 켜져 작업 기록이 사라진 경우
 		}

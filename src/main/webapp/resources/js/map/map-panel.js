@@ -7,6 +7,7 @@
  */
 window.MapPanel = (function () {
   var esc = Common.esc;
+  var C = window.MAP_CONFIG;   // 모델 B 표시 (MODEL_B · dispScore)
   var getCriteria = null, onArchived = null;
   var current = null;        // BuildingDetailTO
 
@@ -27,7 +28,7 @@ window.MapPanel = (function () {
         + '<button type="button" class="sc-head" aria-expanded="' + !!open + '" title="가중치 ' + it.weight + '">' + CHEV
         + '<span class="sc-label">' + esc(it.label) + '</span><span class="sc-sum">' + esc(it.summary || '') + '</span>'
         + '<span class="sc-bar"><i style="width:' + w + '%"></i></span>'
-        + '<b class="sc-pt">' + (it.hit ? '+' + it.points : (it.weight ? '0' : '-')) + '</b></button>'
+        + '<b class="sc-pt">' + (it.pointsText ? (it.hit ? it.pointsText : (it.weight ? '0' : '-')) : (it.hit ? '+' + it.points : (it.weight ? '0' : '-'))) + '</b></button>'
         + '<table class="sc-detail"><thead><tr><th>요인</th><th>이 건물</th><th>기준</th><th class="c">충족</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
     return '<div class="sc-row' + (it.hit ? '' : ' miss') + '" title="가중치 ' + it.weight + ' · ' + esc(it.desc) + '">'
@@ -57,14 +58,22 @@ window.MapPanel = (function () {
     var b = d.building;
     $('#dTitle').text(titleOf(b));
     $('#dAddr').text(b.addr);
-    $('#dScore').text(b.score + '점');
+    /* 점수는 #dScoreTotal 한 곳 (기본 B = 환산 점수, 폭우 = 폭우 시나리오 기준 우선확인 점수, 한파 = 기본 B 점수 + #dScenNote 현장확인 표시).
+       예전 #dScore 참조는 화면에 없는 요소라 지웠다 (2026-11-25) */
+    renderScen(d);
     $('#dChecked').toggle(!!b.checkedAt).text('현장 확인됨 ' + (b.checkedAt || '').slice(5));
     /* 조사 이력 보기 : 현장 방문 기록이 있을 때만 */
     setHistory(b.visitCnt > 0 ? Common.url('archivedetail.do?bldId=' + encodeURIComponent(String(b.bldId))) : null);
     var maxW = d.scoreItems.reduce(function (m, it) { return Math.max(m, it.weight || 0); }, 0);
     /* 처음에는 모두 접어 둔다. 묶음 줄을 눌러야 요인별 표가 펼쳐진다 */
     $('#dScoreItems').html(d.scoreItems.map(function (it) { return scoreRow(it, maxW, false); }).join(''));
-    $('#dScoreTotal').html('합계 <b>' + b.score + '</b>점');
+    if (!C.MODEL_B) $('#dScoreTotal').html('합계 <b>' + b.score + '</b>점');
+    else if (b.scoreTarget === false) $('#dScoreTotal').html('세대수가 없는 건물이라 점수 모델 B 분석 대상이 아닙니다 (우선확인 후보 · 집계 · 순위에서 제외)');
+    /* 점수 아래 작은 설명 문장은 ⓘ 안으로 (2026-11-25, 문구 그대로) */
+    else if (d.scenario === 'rain') $('#dScoreTotal').html('폭우 시나리오 기준 우선확인 점수 <b>' + b.displayScore + '</b>점 · 계산용 원점수 <b>' + Number(b.rawScore).toFixed(2) + '</b>점 (영역별 기여 점수의 합)'
+      + C.tip('폭우 고정 기준 거처 30 · 건물 상태 20 · 침수 기록 40 · 접근성 10. 3개 구 폭우 점수 300번째를 80점, 최고를 100점으로 맞춘 값' + (b.candidate ? ' · 80점 이상 = 폭우 우선확인 후보' : '') + '. 침수 피해 확률이 아닙니다.', '점수 설명'));
+    else $('#dScoreTotal').html('환산 점수 <b>' + b.displayScore + '</b>점 · 계산용 원점수 <b>' + Number(b.rawScore).toFixed(2) + '</b>점 (영역별 기여 점수의 합)'
+      + C.tip('환산 점수 = 3개 구 300번째 계산 점수를 80점, 최고 점수를 100점으로 맞춘 값' + (b.candidate ? ' · 80점 이상 = 우선확인 후보' : ''), '점수 설명'));
 
     var floors = (b.grndFlr != null ? '지상 ' + b.grndFlr + '층' : '') + (b.ugrndFlr ? ' / 지하 ' + b.ugrndFlr + '층' : '');
     if (b.ugrndUnits > 0) floors += (floors ? ' · ' : '') + '지하 전유 ' + b.ugrndUnits + '호';   // 공동주택 전유부 기준 (점수와 무관)
@@ -88,8 +97,30 @@ window.MapPanel = (function () {
     $('#dVulnLine').attr('title', '취약 가구 ' + (rc.vulnHh || 0) + '세대 · ' + types + (rc.hhCnt ? ' (전체 ' + rc.hhCnt + '가구 ' + rc.mbrCnt + '명)' : ''));
     $('#btnResidents').prop('disabled', !rc.hhCnt);
     $('#dMemo').val('');
-    $('#btnArchive').prop('disabled', false).text(archiveLabel(b));
+    $('#btnArchive').prop('disabled', C.MODEL_B && b.scoreTarget === false).text(C.MODEL_B && b.scoreTarget === false ? '분석 대상 아님 (저장 불가)' : archiveLabel(b));
   }
+  /* 기상 시나리오 안내 (2026-11-24) : 응답의 scenario 기준으로 그린다 (요청할 때 기준과 섞이지 않게)
+       폭우 = 침수 기록 연도 수 · 지하층 보유 여부, 한파 = 사용승인 연도 · 현장확인 사유 (B 점수 · 순위는 그대로) */
+  function renderScen(d) {
+    var b = d.building, $n = $('#dScenNote');
+    if (!C.MODEL_B || !d.scenario || d.scenario === 'base' || b.scoreTarget === false) { $n.prop('hidden', true).empty(); return; }
+    var year = /^\d{4}/.test(b.useaprDay || '') ? Number(String(b.useaprDay).slice(0, 4)) : null;
+    /* 2026-11-25 : 한 줄만 보이고 나머지 안내 문장은 그 줄 끝 ⓘ 안 (문구 그대로) */
+    if (d.scenario === 'rain') {
+      $n.html('<b>폭우 기준 점수</b> · 침수 기록 <b>' + esc(b.floodCnt) + '개 연도</b> · 지하층 <b>' + (b.ugrndRes === 1 ? '있음' : '없음') + '</b>'
+        + C.tip('<b>폭우 시나리오</b> · 침수 기록 ' + esc(b.floodCnt) + '개 연도 · 지하층 보유 주택 ' + (b.ugrndRes === 1 ? '있음' : '없음') + '<br>'
+          + '경사는 폭우 점수에 넣지 않습니다 (경사 ' + Number(b.slopeDeg || 0).toFixed(1) + '°). 실제 침수 · 지하 거주 여부는 현장에서 확인이 필요합니다.')).prop('hidden', false);
+      return;
+    }
+    var ym = d.coldYearMax || C.COLD_YEAR_MAX, head, more;
+    var COLD_COMMON = '한파는 새 점수식이 아니라 기본 B 점수 · 순위 그대로에 추가 확인 표시만 붙입니다.';
+    if (b.coldCheck === 'Y') { head = '<b class="cold-y">한파 현장확인 대상</b> · ' + (ym + 1) + '년 이전 사용승인 (' + year + '년)'; more = esc(C.COLD_NOTE); }
+    else if (b.coldCheck === 'U') { head = '<b>사용승인일 확인 불가</b>'; more = '한파 확인 불가 · 사용승인일이 없어 대상 여부를 판단할 수 없습니다 (기본 B 우선확인 후보)'; }
+    else if (b.candidate) { head = '<b>' + (ym + 1) + '년 이후 사용승인</b> (' + (year || '-') + '년)'; more = '한파 현장확인 해당 없음 · 사용승인 ' + (year || '-') + '년 (' + (ym + 1) + '년 이후 사용승인)'; }
+    else { head = '<b>한파 표시 대상 아님</b>'; more = '한파 현장확인은 기본 B 우선확인 후보 중에서만 봅니다' + (year ? ' (사용승인 ' + year + '년)' : ''); }
+    $n.html(head + C.tip(more + '<br>' + COLD_COMMON)).prop('hidden', false);
+  }
+
   /* 저장 버튼 문구 (13단계) : building.do 의 archiveCnt(내 보관함) · visitCnt(방문 기록) 로 */
   function archiveLabel(b) {
     if (!(b.archiveCnt > 0)) return '보관함에 저장';
@@ -141,12 +172,16 @@ window.MapPanel = (function () {
   }
   function closeResidents() { $('#resModal').removeClass('open'); }
 
+  var showSeq = 0;
   function show(bldId) {
     current = null;
+    var my = ++showSeq;                                 // 시나리오를 바꾼 뒤 늦게 온 옛 응답은 버린다 (2026-11-24)
     $('#panelRight').addClass('open');
     $('#resultView').hide(); $('#detailView').show();
     $('#dTitle').text('불러오는 중…'); $('#dAddr').text(''); setHistory(null); $('#dScoreItems, #dInfo, #dWelf').empty();
+    $('#dScenNote').prop('hidden', true).empty();
     MapApi.building($.extend({}, getCriteria(), { bldId: bldId })).done(function (d) {
+      if (my !== showSeq) return;
       if (!d || !d.building) { Common.toast('건물 정보를 찾을 수 없습니다.'); return; }
       current = d;
       renderInfo(d);
@@ -183,7 +218,7 @@ window.MapPanel = (function () {
     $('#btnArchive').on('click', function () {
       if (!current) return;
       var $b = $(this).prop('disabled', true), bld = current.building, bldId = bld.bldId;
-      MapApi.archiveAdd(bldId, current.building.sggCd, current.building.score, getCriteria()).done(function (res) {
+      MapApi.archiveAdd(bldId, current.building.sggCd, C.dispScore(current.building), getCriteria()).done(function (res) {
         if (res && res.ok === false) {
           if (res.code === 'DUP') {
             var info = res.savedAt ? esc(res.savedAt) + ' 저장 · ' + esc(res.savedScore) + '점' : esc(res.msg || '');
@@ -238,7 +273,7 @@ window.MapPanel = (function () {
     Common.dialog({
       title: res.code === 'UPDATED' ? '점수를 갱신해 다시 저장했습니다' : '보관함에 저장했습니다',
       html: '<div class="dlg-info"><span class="t">' + esc(titleOf(bld)) + '</span>'
-        + '<span class="s">' + day + ' 저장 · ' + esc(bld.score) + '점 · ' + esc(scenLabel(getCriteria ? getCriteria() : null)) + '</span></div>'
+        + '<span class="s">' + day + ' 저장 · ' + (C.MODEL_B ? (current && current.scenario === 'rain' ? '폭우 환산 ' : '환산 ') : '') + esc(C.dispScore(bld)) + '점 · ' + esc(scenLabel(getCriteria ? getCriteria() : null)) + '</span></div>'
         + '<label class="dlg-off"><input type="checkbox" class="dlg-off-chk"> 다시 보지 않기</label>',
       okText: '보관함에서 보기', cancelText: '닫기'
     }).done(function (go) {

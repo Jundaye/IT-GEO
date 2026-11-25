@@ -146,6 +146,16 @@
 .wp-row.locked .wp-name, .wp-row.locked > b { color: var(--text-3); }
 .wp-row > b i { font-style: normal; font-weight: 400; color: var(--text-2); }   /* "100 → 25점" 의 반영 점수 */
 .wp-sum { margin: 8px 0 0; font-size: 11.5px; color: var(--text-2); }
+.b-note { margin: 4px 2px 10px; font-size: 11.5px; line-height: 1.6; color: var(--text-2); }   /* 모델 B 환산 점수 안내 */
+/* 모델 B 조건별 검색 (4차) : 추가 조회 조건 소제목 · 모두 해제 · 날씨 버튼 "준비 중" */
+.bf-sub { margin: 10px 4px 2px; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 12px; font-weight: 600; color: var(--text); }
+.bf-sub small { margin-left: 6px; font-weight: 400; font-size: 11px; color: var(--text-3); }
+.bf-reset { display: block; margin: 8px 4px 2px auto; font-size: 11.5px; }
+.sec-head .badge[hidden] { display: none; }
+.scen-btn .scen-soon { margin-left: 2px; padding: 0 5px; border-radius: 8px; font-size: 10px; line-height: 15px; background: var(--line-soft); color: var(--text-3); }
+.scen-btn.on .scen-soon { background: rgba(255, 255, 255, .25); color: #fff; }
+.scen-bar.folded .scen-btn .scen-soon { display: none; }
+.sc-note { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: var(--text-3); }
 .wp-sum.warn { color: var(--danger); }
 .wp-note { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: var(--text-3); }   /* 점수 규칙 안내 (15단계 B-7) */
 
@@ -719,3 +729,65 @@ body.dragging #pano { pointer-events: none; }   /* 손잡이를 끄는 동안 �
 @keyframes rs-pulse { from { opacity: .45; } to { opacity: 1; } }
 .rs-empty b { display: block; margin-bottom: 4px; font-weight: 500; color: var(--text-2); }
 .rs-empty .btn { margin-top: 12px; height: 32px; padding: 0 14px; font-size: 12.5px; font-weight: 500; }
+
+/* 모델 B 분석 비대상 (주소 검색으로만 나옴) */
+.rs-row.rs-nontarget .rs-title { color: var(--text-2); }
+
+/* 모델 B 조회 범위 (5차) : [우선확인 후보만] [전체 분석 대상] 두 칸. 왼쪽 패널 · 지도 아래 같은 값, 고른 칸 = 메인 컬러 */
+.scope-seg { display: flex; align-items: center; gap: 0; margin: 2px 4px 8px; }
+.scope-seg .scope-lbl { margin-right: 8px; font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.scope-seg button { flex: 1 1 0; height: 30px; padding: 0 8px; font-size: 12px; white-space: nowrap; cursor: pointer;
+  background: var(--bg-panel); color: var(--text-2); border: 1px solid var(--line); }
+.scope-seg button + button { border-left: 0; }
+.scope-seg button:first-of-type { border-radius: var(--radius) 0 0 var(--radius); }
+.scope-seg button:last-of-type { border-radius: 0 var(--radius) var(--radius) 0; }
+.scope-seg button.on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.map-scope { flex: 0 0 auto; margin: 0; }
+.map-scope button { height: 32px; flex: 0 0 auto; }
+.rs-split { margin: 6px 24px 0; font-size: 12px; color: var(--text-2); line-height: 1.6; }
+.rs-split b { color: var(--text); }
+.rs-split .scope-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 8px; font-style: normal; font-size: 11px; line-height: 18px; }
+.rs-split .scope-tag.cand { background: var(--primary); color: #fff; }
+.rs-split .scope-tag.all { border: 1px solid var(--line); color: var(--text); }
+.rp-view.empty .rs-split { display: none !important; }
+
+/* ===== 모델 B 기상 시나리오 (2026-11-24) : 폭우 = 고정 기준 표시, 한파 = 현장확인 표시 · 보기 전환 ===== */
+.rs-split .scope-tag.rain { background: #4a8fe0; color: #fff; }
+.rs-split .scope-tag.cold { background: #7fb3d5; color: #10161f; }
+.rs-split .cold-line { display: block; margin-top: 4px; }
+.rs-split .cold-seg { display: flex; margin: 6px 0 2px; }
+.rs-split .cold-seg button { flex: 1 1 0; height: 28px; padding: 0 8px; font-size: 12px; white-space: nowrap; cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--line); color: var(--text-2); }
+.rs-split .cold-seg button + button { border-left: 0; }
+.rs-split .cold-seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.rs-split .cold-seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.rs-split .cold-seg button.on { background: #4a8fe0; border-color: #4a8fe0; color: #fff; font-weight: 600; }
+.rs-split .cold-note { display: block; font-size: 11px; color: var(--text-3); }
+.rs-cold { margin-left: 8px; padding: 0 6px; border-radius: var(--radius); border: 1px solid #4a8fe0; color: #4a8fe0; font-size: 10.5px; white-space: nowrap; }
+.rs-cold.unk { border-color: var(--line); color: var(--text-3); }
+.d-scen-note { margin: 8px 0 4px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid #4a8fe0; border-radius: var(--radius); font-size: 12px; color: var(--text-2); line-height: 1.6; }
+.d-scen-note b { color: var(--text); }
+.d-scen-note b.cold-y { color: #4a8fe0; }
+.d-scen-note small { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); }
+.wp-row.fixed input[type=range] { opacity: .55; cursor: not-allowed; }
+
+/* ---------- 문구 줄이기 (2026-11-25) ---------- */
+/* ⓘ 안내 아이콘 (MAP_CONFIG.tip) : 단색 선 아이콘, 올리거나 누르면 #infoTipPop */
+.info-tip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; vertical-align: -4px; border-radius: 50%; color: var(--text-3); cursor: pointer; }
+.info-tip:hover, .info-tip:focus-visible { color: var(--primary); outline: none; }
+.info-tip .ico { width: 14px; height: 14px; }
+.info-tip .tip-body { display: none; }
+.info-pop { position: fixed; z-index: var(--z-toast); max-width: 320px; padding: 8px 10px; background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35); font-size: 12px; font-weight: 400; line-height: 1.6; color: var(--text-2); white-space: normal; word-break: keep-all; overflow-wrap: anywhere; text-align: left; }
+.info-pop[hidden] { display: none; }
+.info-pop b { color: var(--text); }
+/* 오른쪽 여닫기 버튼 옆 건수 표시 (모델 B). 패널이 열리면 숨김 (목록 머리에 같은 숫자) */
+.rp-count { position: absolute; right: 19px; top: 50%; transform: translateY(-50%); height: 28px; padding: 0 10px; border: 1px solid var(--line); border-right: 0;
+  border-radius: 14px 0 0 14px; background: var(--bg-panel); color: var(--text); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; z-index: var(--z-panel-ui); }
+.rp-count:hover { background: var(--bg-hover); }
+.rp-count[hidden], .map-layout:has(.right-panel.open) .rp-count { display: none; }
+/* 목록 머리 첫 줄 = 시나리오 · 건수 */
+.rs-scope .rs-head { color: var(--text); font-size: 13px; font-weight: 600; }
+.rs-split .cond-line { display: block; margin-top: 2px; }
+.rs-split .cold-seg:first-child { margin-top: 0; }
+.map-legend .info-tip { margin-left: 2px; }
