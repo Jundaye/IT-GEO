@@ -27,6 +27,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *   app.llm.api-key     Bearer 키 (로컬 서버처럼 키가 필요 없으면 비워 둔다)
  *   app.llm.model       모델 이름
  *   app.llm.timeout-sec 응답 대기 초 (기본 90)
+ *   app.llm.vision      현장 사진도 같이 보낼지 (기본 true). 모델이 이미지를 못 받으면 글자만 다시 보낸다
+ *   app.llm.max-photos  보고서 한 번에 보낼 사진 수 (기본 8, 최근 기록 사진부터)
  * 개인정보 보호 : 보내기 전에 전화번호 · 주민등록번호 모양의 숫자를 가린다 (mask).
  */
 @Service
@@ -50,6 +52,15 @@ public class LlmService {
 	@Value("${app.llm.timeout-sec:90}")
 	int timeoutSec;
 
+	@Value("${app.llm.vision:true}")
+	boolean vision;
+
+	@Value("${app.llm.max-photos:8}")
+	int maxPhotos;
+
+	/** LLM 에 같이 보낼 사진 1장. label = 프롬프트에서 부를 이름 ("사진 1 · (3) 2026-11-20 기록 · 욕실"), dataUrl = data:image/jpeg;base64,... */
+	public record Image(String label, String dataUrl) {}
+
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 
 	/** 설정이 되어 있는지 (화면 안내용) */
@@ -62,13 +73,51 @@ public class LlmService {
 	 * temperature 는 낮게 (공문서 문체, 같은 입력이면 비슷한 결과)
 	 */
 	public String chat(String system, String user) {
+		return chat(system, user, null);
+	}
+
+	/**
+	 * 사진을 같이 보내는 chat (OpenAI 호환 멀티모달 : content 배열 + image_url). 사진이 없거나 app.llm.vision=false 면 글자만.
+	 * 모델이 이미지를 받지 못해 4xx 가 오면 사진 없이 한 번 더 보낸다 (보고서는 사진 분석 없이라도 나오게)
+	 */
+	public String chat(String system, String user, List<Image> images) {
 		if (!isConfigured()) throw new IllegalStateException("AI 설정이 없습니다. app.properties 의 app.llm.base-url · app.llm.model 을 확인해 주세요.");
+		if (images != null && !images.isEmpty() && vision) {
+			List<Map<String, Object>> content = new ArrayList<>();
+			content.add(Map.of("type", "text", "text", mask(user)));
+			for (Image im : images) {
+				content.add(Map.of("type", "text", "text", "[" + im.label() + "]"));
+				content.add(Map.of("type", "image_url", "image_url", Map.of("url", im.dataUrl(), "detail", "low")));
+			}
+			try {
+				return send(system, content);
+			} catch (LlmHttpException e) {
+				if (e.status / 100 != 4) throw e;
+				log.warn("LLM rejected images (HTTP {}), retry without photos", e.status);
+				return send(system, mask(user) + "\n\n(참고: 현장 사진 " + images.size() + "장은 AI 모델이 이미지를 받지 못해 보내지 못했다. 사진 내용은 쓰지 않는다.)");
+			}
+		}
+		return send(system, mask(user));
+	}
+
+	/** 사진을 같이 보낼 수 있는 설정인지 */
+	public boolean isVisionEnabled() {
+		return isConfigured() && vision;
+	}
+
+	/** 보고서 한 번에 보낼 사진 수 (0 ~ 20) */
+	public int getMaxPhotos() {
+		return Math.max(0, Math.min(20, maxPhotos));
+	}
+
+	/** userContent = 글자(String) 또는 멀티모달 content 배열 */
+	private String send(String system, Object userContent) {
 		String url = baseUrl.trim().replaceAll("/+$", "") + "/chat/completions";
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("model", model.trim());
-		List<Map<String, String>> msgs = new ArrayList<>();
+		List<Map<String, Object>> msgs = new ArrayList<>();
 		msgs.add(Map.of("role", "system", "content", system));
-		msgs.add(Map.of("role", "user", "content", mask(user)));
+		msgs.add(Map.of("role", "user", "content", userContent));
 		body.put("messages", msgs);
 		body.put("temperature", 0.2);
 
@@ -88,8 +137,8 @@ public class LlmService {
 			throw new IllegalStateException("AI 서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
 		}
 		if (res.statusCode() / 100 != 2) {
-			log.warn("LLM HTTP {} : {}", res.statusCode(), res.body() == null ? "" : res.body().substring(0, Math.min(300, res.body().length())));
-			throw new IllegalStateException("AI 서버가 요청을 처리하지 못했습니다. (HTTP " + res.statusCode() + ")");
+			log.warn("LLM HTTP {} : {}", res.statusCode(), cut(res.body()));
+			throw new LlmHttpException(res.statusCode());
 		}
 		try {
 			JsonNode n = JSON.readTree(res.body()).path("choices").path(0).path("message").path("content");
@@ -100,6 +149,21 @@ public class LlmService {
 			throw e;
 		} catch (Exception e) {
 			throw new IllegalStateException("AI 응답을 읽지 못했습니다. 다시 시도해 주세요.");
+		}
+	}
+
+	private static String cut(String s) {
+		return s == null ? "" : s.substring(0, Math.min(300, s.length()));
+	}
+
+	/** chat/completions 가 2xx 가 아닐 때 (사진 거부 → 글자만 다시 보내기 판단용). 화면 문구는 기존과 같다 */
+	static class LlmHttpException extends IllegalStateException {
+		private static final long serialVersionUID = 1L;
+		final int status;
+
+		LlmHttpException(int status) {
+			super("AI 서버가 요청을 처리하지 못했습니다. (HTTP " + status + ")");
+			this.status = status;
 		}
 	}
 

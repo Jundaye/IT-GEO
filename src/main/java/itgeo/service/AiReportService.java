@@ -1,5 +1,11 @@
 package itgeo.service;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -9,11 +15,18 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,12 +44,15 @@ import itgeo.to.ArchiveDetailTO;
 import itgeo.to.BuildingTO;
 import itgeo.to.MemberTO;
 import itgeo.to.MemoTO;
+import itgeo.to.PhotoTO;
 import itgeo.to.RecordTO;
 import itgeo.to.TransferTO;
 
 /**
  * AI 현장 확인보고서 (05 건물 확인 이력 → [AI 현장 확인보고서 생성]).
  *  1) generate : 그 시설의 현장조사이력 전부(+ 모바일 앱 기록의 항목 점수 · 거주자 상태 · 필요한 지원 · 녹취록, 이관 · 인수인계)를 LLM 에 주고 본문을 받아 초안을 만든다
+ *               녹취록은 앱이 기기 음성 인식으로 글자로 바꿔 보낸 것(survey_record_detail.transcript)을 그대로 쓰고,
+ *               현장 사진은 최근 기록부터 app.llm.max-photos 장까지 이미지로 같이 보내 "현장 사진 분석" 칸을 받는다
  *  2) save     : 초안을 고른 포맷(PDF · HWPX)으로 그려 app.report.dir/<건물ID>/ 에 저장하고 ai_report 에 남긴다
  * 보고서명 = 사용한 현장조사이력의 가장 오래된 날짜 ~ 가장 최근 날짜 + " AI 보고서" (예: 2025.10.14~2026.11.22 AI 보고서)
  */
@@ -54,6 +70,19 @@ public class AiReportService {
 			{ "opinion", "5. 종합 의견 및 후속 조치" },
 	};
 
+	/** 사진을 보냈을 때 쓰는 본문 칸 (4번 뒤에 사진 분석이 들어가고 종합 의견이 6번) */
+	static final String[][] SECTIONS_WITH_PHOTOS = {
+			{ "overview", "1. 조사 개요" },
+			{ "progress", "2. 현장조사 경과" },
+			{ "factors", "3. 취약 요인 확인 결과" },
+			{ "living", "4. 거주 환경 및 지원 필요 사항" },
+			{ "photos", "5. 현장 사진 분석" },
+			{ "opinion", "6. 종합 의견 및 후속 조치" },
+	};
+
+	/** LLM 에 보내는 사진의 긴 변 (px). detail=low 기준에 맞춰 작게 줄여 비용 · 시간을 줄인다 */
+	static final int PHOTO_LLM_PX = 1024;
+
 	private static final ObjectMapper JSON = new ObjectMapper();
 	private static final DateTimeFormatter DOT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
 
@@ -62,6 +91,9 @@ public class AiReportService {
 
 	@Autowired
 	LlmService llmService;
+
+	@Autowired
+	MobileService mobileService;
 
 	@Autowired
 	AiReportDAO dao;
@@ -87,7 +119,14 @@ public class AiReportService {
 		List<RecordTO> recs = new ArrayList<>(d.getRecords());
 		recs.sort(Comparator.comparing(RecordTO::getVisitedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(RecordTO::getRecordId));
 		int appCnt = 0;      // 모바일 앱에서 저장한 기록 수 (survey_record_detail 이 있는 기록)
-		for (RecordTO r : recs) if (r.isFromApp()) appCnt++;
+		int txCnt = 0;       // 녹취록이 있는 기록 수 (앱 음성 인식 → 글자)
+		for (RecordTO r : recs) {
+			if (r.isFromApp()) appCnt++;
+			if (!blank(r.getTranscript())) txCnt++;
+		}
+		List<LlmService.Image> images = llmService.isVisionEnabled() ? photosForLlm(recs, llmService.getMaxPhotos()) : List.of();
+		int photoTotal = 0;
+		for (RecordTO r : recs) photoTotal += r.getPhotos().size();
 
 		// 보고서 기간 = 사용한 현장조사이력 중 가장 오래된 날 ~ 가장 최근 날
 		LocalDate from = LocalDate.parse(recs.get(0).getVisitedAt().substring(0, 10));
@@ -113,6 +152,11 @@ public class AiReportService {
 		rp.getFacts().add(new String[] { "사전 탐지 요인", blank(d.getDetectedText()) ? "없음" : d.getDetectedText() });
 		rp.getFacts().add(new String[] { "조사 기간", from.format(DOT) + " ~ " + to.format(DOT) + " (현장조사이력 " + recs.size() + "건)" });
 		rp.getFacts().add(new String[] { "모바일 앱 연동", appCnt == 0 ? "앱에서 저장한 기록 없음" : "현장조사이력 중 모바일 앱 기록 " + appCnt + "건" });
+		if (photoTotal > 0 || txCnt > 0) {
+			String ai = (photoTotal == 0 ? "" : "현장 사진 " + photoTotal + "장 중 " + images.size() + "장 AI 분석")
+					+ (txCnt == 0 ? "" : (photoTotal == 0 ? "" : " · ") + "녹취록 " + txCnt + "건 반영");
+			rp.getFacts().add(new String[] { "사진 · 녹취록 분석", ai });
+		}
 		rp.getFacts().add(new String[] { "부서 이관", blank(d.getTransferDept()) ? "없음" : d.getTransferDept() });
 
 		// 붙임 표 : 현장조사이력 날짜순. 앱 기록은 방문 결과 뒤에 (앱), 메모 뒤에 항목 점수 · 사진 · 녹취록 유무
@@ -131,9 +175,80 @@ public class AiReportService {
 					memo.length() == 0 ? "-" : memo.toString() });
 		}
 
-		String answer = llmService.chat(systemPrompt(), userPrompt(d, place, recs));
-		rp.setSections(sections(answer));
+		boolean withPhotos = !images.isEmpty();
+		String user = userPrompt(d, place, recs) + (withPhotos ? photoGuide(images) : "");
+		String answer = llmService.chat(systemPrompt(withPhotos), user, images);
+		// 모델이 사진을 못 받아 글자만 보낸 경우 사진 칸이 비어 온다 → 그때도 칸은 남기되 "해당 내용 없음."
+		rp.setSections(sections(answer, withPhotos ? SECTIONS_WITH_PHOTOS : SECTIONS));
 		return rp;
+	}
+
+	/**
+	 * LLM 에 보낼 사진 : 최근 기록부터 max 장. 파일을 긴 변 1024px JPEG 로 줄여 data URL 로.
+	 * 이름은 "사진 k · (기록 번호) 날짜 기록 · 라벨" (기록 번호 = userPrompt 의 (n) 과 같은 번호)
+	 */
+	List<LlmService.Image> photosForLlm(List<RecordTO> recs, int max) {
+		List<LlmService.Image> out = new ArrayList<>();
+		if (max <= 0) return out;
+		Path root = mobileService.uploadRoot();
+		for (int i = recs.size() - 1; i >= 0 && out.size() < max; i--) {
+			RecordTO r = recs.get(i);
+			for (PhotoTO p : r.getPhotos()) {
+				if (out.size() >= max) break;
+				Path f = root.resolve(nvl(p.getFileName())).normalize();
+				if (!f.startsWith(root) || !Files.isRegularFile(f)) continue;
+				String url = toJpegDataUrl(f);
+				if (url == null) continue;
+				String label = "사진 " + (out.size() + 1) + " · (" + (i + 1) + ") " + nvl(r.getVisitedAt()).replaceAll(" .*", "") + " 기록"
+						+ (blank(p.getLabel()) ? "" : " · " + p.getLabel().trim());
+				out.add(new LlmService.Image(label, url));
+			}
+		}
+		return out;
+	}
+
+	/** 사진 파일 → 긴 변 PHOTO_LLM_PX 이하 JPEG data URL. 못 읽는 형식(WEBP 등)은 1MB 이하일 때만 원본 그대로, 아니면 null */
+	static String toJpegDataUrl(Path f) {
+		try {
+			byte[] raw = Files.readAllBytes(f);
+			BufferedImage src = ImageIO.read(new ByteArrayInputStream(raw));
+			if (src == null) {
+				String n = f.getFileName().toString().toLowerCase();
+				String mime = n.endsWith(".webp") ? "image/webp" : n.endsWith(".png") ? "image/png" : "image/jpeg";
+				return raw.length <= 1024 * 1024 ? "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(raw) : null;
+			}
+			int w = src.getWidth(), h = src.getHeight();
+			double k = Math.min(1.0, (double) PHOTO_LLM_PX / Math.max(w, h));
+			int nw = Math.max(1, (int) Math.round(w * k)), nh = Math.max(1, (int) Math.round(h * k));
+			BufferedImage dst = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_RGB);
+			Graphics2D g = dst.createGraphics();
+			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g.setColor(Color.WHITE);
+			g.fillRect(0, 0, nw, nh);
+			g.drawImage(src, 0, 0, nw, nh, null);
+			g.dispose();
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			ImageWriter wr = ImageIO.getImageWritersByFormatName("jpeg").next();
+			ImageWriteParam prm = wr.getDefaultWriteParam();
+			prm.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+			prm.setCompressionQuality(0.8f);
+			try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+				wr.setOutput(ios);
+				wr.write(null, new IIOImage(dst, null, null), prm);
+			} finally {
+				wr.dispose();
+			}
+			return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	/** 사진 목록 안내 (프롬프트 끝) */
+	static String photoGuide(List<LlmService.Image> images) {
+		StringBuilder u = new StringBuilder("\n[첨부 현장 사진] ").append(images.size()).append("장 (이 글 뒤에 이름과 함께 붙어 있음)\n");
+		for (LlmService.Image im : images) u.append("- ").append(im.label()).append('\n');
+		return u.toString();
 	}
 
 	/** 초안 → 파일 저장 + ai_report 기록. {reportId, fileName, title, format} */
@@ -226,8 +341,12 @@ public class AiReportService {
 	// ---------- LLM ----------
 
 	static String systemPrompt() {
+		return systemPrompt(false);
+	}
+
+	static String systemPrompt(boolean withPhotos) {
 		StringBuilder keys = new StringBuilder();
-		for (String[] s : SECTIONS) keys.append("  \"").append(s[0]).append("\": \"").append(s[1].substring(3)).append("\",\n");
+		for (String[] s : withPhotos ? SECTIONS_WITH_PHOTOS : SECTIONS) keys.append("  \"").append(s[0]).append("\": \"").append(s[1].substring(3)).append("\",\n");
 		return String.join("\n",
 				"너는 서울시 구청의 취약 주거 '현장 확인보고서'를 쓰는 행정 보조 도구다.",
 				"한 시설에 대해 쌓인 현장조사이력(방문 일시, 담당자, 방문 결과, 사전 탐지 요인 확인, 관찰 메모, 모바일 앱의 항목별 취약점수 · 녹취록)과",
@@ -237,6 +356,10 @@ public class AiReportService {
 				"- 입력에 없는 사실을 지어내지 않는다. 기록끼리 다르면 날짜를 밝혀 변화로 적는다. 추정은 '~로 보임'으로 구분한다.",
 				"- 사람 이름, 연락처, 주민등록번호 등 개인을 특정할 수 있는 정보는 쓰지 않는다. 담당자는 '담당자', 거주자는 '거주자'로 적는다.",
 				"- 항목별 취약점수는 1(양호) ~ 5(위험)이며 4점 이상은 주의 항목이다.",
+				"- 녹취록은 현장에서 앱이 대화를 음성 인식으로 글자로 옮긴 것이다(틀린 글자가 있을 수 있음). 거주자가 말한 불편 · 요청 · 건강 · 생활 상태를 요약해 근거로 쓰고, 말을 그대로 길게 옮기지 않는다.",
+				withPhotos
+						? "- 현장 사진이 '사진 k · (기록 번호) 날짜' 이름으로 붙어 있다. 사진에서 직접 보이는 것(곰팡이 · 누수 · 침수 흔적, 균열, 적치물, 출입구 · 탈출로 · 창문 상태, 위생 등)만 'photos' 칸에 사진 번호를 밝혀 적고('사진 2에서 ~ 보임'), 다른 칸에도 근거로 쓸 수 있다. 사진으로 판단이 어려우면 '사진으로는 확인 어려움'이라고 쓴다. 사람 얼굴 · 차량 번호 · 문서 글자 등 개인을 특정할 수 있는 내용은 쓰지 않는다."
+						: "- 현장 사진은 장수만 주어진다. 사진 내용을 지어내지 않는다.",
 				"- 취약도 점수는 우선 확인할 건물을 고르기 위한 상대 점수다. '위험 건물', '위험 확률'로 단정하지 말고 '우선확인 후보', '환산 점수'처럼 입력에 적힌 의미 그대로 쓴다.",
 				"- 아래 키를 가진 JSON 객체 하나만 출력한다. 값은 모두 문자열이다. 설명 문장이나 코드 블록 표시는 넣지 않는다.",
 				"{",
@@ -301,10 +424,14 @@ public class AiReportService {
 
 	/** LLM 응답(JSON) → 본문 칸. JSON 이 아니면 전체를 "종합 의견" 한 칸으로 */
 	static List<AiReportTO.Section> sections(String answer) {
+		return sections(answer, SECTIONS);
+	}
+
+	static List<AiReportTO.Section> sections(String answer, String[][] keys) {
 		List<AiReportTO.Section> out = new ArrayList<>();
 		JsonNode n = LlmService.extractJson(answer);
 		if (n != null && n.isObject()) {
-			for (String[] s : SECTIONS) {
+			for (String[] s : keys) {
 				JsonNode v = n.get(s[0]);
 				String body = v == null || v.isNull() ? "" : v.isArray() ? joinArray(v) : v.asText();
 				out.add(new AiReportTO.Section(s[1], blank(body) ? "해당 내용 없음." : body.trim()));
