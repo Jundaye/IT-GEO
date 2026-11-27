@@ -11,12 +11,15 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 <%-- 이 화면 전용 스타일 --%>
-<link rel="stylesheet" href="${ctx}/resources/css/fieldlist.css">
+<link rel="stylesheet" href="${ctx}/resources/css/fieldlist.css?v=20261127s">
 
 <%--
   현장 확인 리스트 + 현장 확인 상세(예전 fielddetail.jsp)를 한 화면에.
   왼쪽 = 리스트 카드 (||| · 상태 점 · 이름 · 건물 수 · 상태 · ⌄). ⌄ 를 누르면 그 리스트의 건물이 펼쳐지고 오른쪽 지도에 동선이 그려진다.
   오른쪽 = 큰 지도 + 경로 · 소요시간 카드 (이동수단을 바꾸면 api/field/mode.do 로 저장, TMAP 경로는 api/field/walk.do).
+  화면 두 가지 (가운데 동그라미 버튼으로 바꾼다, 마지막 선택은 브라우저에 기억) :
+    리스트 크게 (기본, .list-wide) = 넓은 리스트(구분 · 취약 요인 · 취약 가구까지) + 작은 지도(약도) + 지도 아래 경로 카드
+    지도 크게   (.map-wide)       = 좁은 리스트 + 큰 지도 + 지도 위에 뜬 경로 카드
 --%>
 <div class="page">
   <div class="page-head"><h1>현장 확인 리스트</h1></div>
@@ -38,7 +41,7 @@
   </div>
   <div class="fl-divider" style="border-bottom:1px solid var(--line);margin:0 0 16px"></div>
 
-  <div class="fx-split">
+  <div class="fx-split list-wide" id="fxSplit">
     <%-- ===== 왼쪽 : 리스트 카드 ===== --%>
     <div class="fx-side">
       <div class="fx-box">
@@ -74,6 +77,8 @@
                     <span class="addr"><c:out value="${it.addr}"/></span>
                     <span class="leg"><span class="leg-from">${s.first ? '출발지에서 ' : '이전 지점에서 '}</span><span class="leg-min">${it.legMin}</span>분 <span class="leg-km">(${it.legKm}km)</span></span>
                   </div>
+                  <span class="bd"><span class="badge scen scen-${it.scenKey}" title="<c:out value='${it.scenTitle}'/>"><c:out value="${it.scenLabel}"/></span></span>
+                  <span class="fac"><c:out value="${empty it.factorText ? '해당 요인 없음' : it.factorText}"/><small> · 취약 가구 ${it.vulnHhCnt}</small></span>
                   <div class="sc"><b>${it.score}</b><small>취약도</small><c:choose><c:when test="${it.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose></div>
                   <div class="ck">
                     <c:choose>
@@ -108,10 +113,19 @@
       <a class="fx-add" href="${ctx}/fieldedit.do?listId=0" title="새 현장확인 리스트"><span>+</span></a>
     </div>
 
-    <%-- ===== 오른쪽 : 큰 지도 + 경로 · 소요시간 카드 (펼친 리스트 기준) ===== --%>
+    <%-- ===== 가운데 : 리스트 크게 ↔ 지도 크게 ===== --%>
+    <div class="fx-toggle-col">
+      <button type="button" class="fx-toggle" id="fxToggle" title="지도 크게 보기" aria-label="지도 크게 보기"><i></i></button>
+      <small class="fx-toggle-tx" id="fxToggleTx">지도 크게</small>
+    </div>
+
+    <%-- ===== 오른쪽 : 지도 + 경로 · 소요시간 카드 (펼친 리스트 기준) ===== --%>
+    <div class="fx-mapcol">
     <div class="fd-map fx-map" id="fxMap">
       <div class="nmap" id="map"></div>
       <div class="map-ctrl"><button type="button" id="zoomIn" title="확대">+</button><button type="button" id="zoomOut" title="축소">−</button></div>
+      <div class="fx-map-empty" id="fxMapEmpty" style="display:none"></div>
+    </div>
       <div class="card route-card" id="routeCard">
         <div class="card-head"><h3>경로 · 소요시간</h3><small id="rtCap">리스트를 펼쳐 주세요</small></div>
         <%@ include file="/WEB-INF/views/include/mode-icons.jspf" %>
@@ -128,7 +142,6 @@
 
         </div>
       </div>
-      <div class="fx-map-empty" id="fxMapEmpty" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -164,7 +177,80 @@
       window.navermap_authFailure = function () { map = null; if (prevFail) prevFail(); };
     }
     var $info = $('<div class="map-float tc walk-info"></div>').appendTo('#fxMap').hide();
-    var drawn = [], dash = null, routeLine = null, seq = 0, cur = null;
+    var drawn = [], dash = null, routeLine = null, seq = 0, cur = null, lastBounds = null;
+
+    /* ---------- 리스트 크게 ↔ 지도 크게 ---------- */
+    var VIEW_KEY = 'itgeo.fxView', $split = $('#fxSplit');
+    function mapWide() { return $split.hasClass('map-wide'); }
+    /* 지도 크게 : 경로 카드가 지도 오른쪽 위에 떠 있어서 그만큼 비우고 맞춘다 */
+    function fitRoute() {
+      if (!map || !lastBounds) return;
+      map.fitBounds(lastBounds, mapWide() ? { top: 60, right: 400, bottom: 40, left: 40 } : { top: 50, right: 30, bottom: 30, left: 30 });
+    }
+    /* 지도 칸 크기를 네이버 지도에 다시 알려 준다 (칸이 커지는 동안 매 프레임 · 끝나면 경로 맞춤) */
+    function syncSize() {
+      if (!map) return;
+      var el = document.getElementById('map');
+      if (el.clientWidth && el.clientHeight) map.setSize(new naver.maps.Size(el.clientWidth, el.clientHeight));
+    }
+    function resizeMap() { syncSize(); fitRoute(); }
+
+    /* 칸 너비를 px 로 정해 준다. fr(남는 칸) ↔ px 는 브라우저가 중간값을 못 만들어서 뚝 끊기기 때문에
+       둘 다 px 로 바꿔야 grid-template-columns 가 부드럽게 움직인다. 숫자는 fieldlist.css 와 같게 */
+    var GAP = 12, TOG = 56, SIDE = 440, MINI = 520, ANIM_MS = 420, FADE_MS = 140;
+    var narrowMq = window.matchMedia('(max-width: 1100px)');
+    function applyCols(wide) {
+      var W = $split[0].clientWidth;
+      if (narrowMq.matches || !W) { $split[0].style.gridTemplateColumns = ''; return; }
+      var c = wide ? [SIDE, W - TOG - SIDE - GAP * 2] : [W - TOG - MINI - GAP * 2, MINI];
+      $split[0].style.gridTemplateColumns = c[0] + 'px ' + TOG + 'px ' + c[1] + 'px';
+    }
+    function setView(wide, save) {
+      $split.toggleClass('map-wide', wide).toggleClass('list-wide', !wide);
+      var label = wide ? '리스트 크게' : '지도 크게';
+      $('#fxToggle').attr({ title: label + ' 보기', 'aria-label': label + ' 보기' });
+      $('#fxToggleTx').text(label);
+      if (save) { try { localStorage.setItem(VIEW_KEY, wide ? 'map' : 'list'); } catch (e) {} }
+    }
+    /* 칸이 움직이는 동안 지도도 같이 따라 커지게 (안 그러면 늘어난 자리가 회색으로 비었다가 끝에 한 번에 찬다) */
+    function follow(ms, done) {
+      var t0 = null;
+      (function step(ts) {
+        if (t0 === null) t0 = ts;
+        syncSize();
+        if (ts - t0 < ms) requestAnimationFrame(step); else done();
+      })(performance.now());
+    }
+    var busy = false;
+    $('#fxToggle').on('click', function () {
+      if (busy) return;
+      busy = true;
+      var wide = !mapWide();
+      applyCols(!wide);                                   /* 출발 값도 px 로 고정 */
+      $split.addClass('fx-anim');                         /* ① 경로 카드 · 요인 칸 살짝 사라짐 */
+      setTimeout(function () {
+        setView(wide, true);                              /* ② 칸 · 지도 높이가 부드럽게 바뀜 */
+        applyCols(wide);
+        follow(ANIM_MS, function () {
+          resizeMap();                                    /* ③ 경로 다시 맞추고 */
+          $split.removeClass('fx-anim');                  /*    경로 카드 다시 나타남 */
+          busy = false;
+        });
+      }, FADE_MS);
+    });
+    var resizeTimer = null;
+    $(window).on('resize', function () {
+      $split.addClass('fx-noanim'); applyCols(mapWide());   /* 창 크기 바꿀 때는 애니메이션 없이 */
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { $split.removeClass('fx-noanim'); resizeMap(); }, 200);
+    });
+    var savedView = null;
+    try { savedView = localStorage.getItem(VIEW_KEY); } catch (e) {}
+    $split.addClass('fx-noanim');                         /* 처음 그릴 때는 애니메이션 없이 */
+    setView(savedView === 'map', false);                  /* 처음 들어오면 리스트 크게(약도) */
+    applyCols(savedView === 'map');
+    setTimeout(function () { $split.removeClass('fx-noanim'); }, 50);
+    if (map) resizeMap();
 
     function clearMap() {
       drawn.forEach(function (m) { m.setMap(null); }); drawn = [];
@@ -262,7 +348,8 @@
       dash = new naver.maps.Polyline({ map: map, path: path, strokeColor: '#4a8fe0', strokeWeight: 4, strokeStyle: 'shortdash', strokeOpacity: 0.95, zIndex: 50 });
       var b = new naver.maps.LatLngBounds(path[0], path[0]);
       path.forEach(function (p) { b.extend(p); });
-      map.fitBounds(b, { top: 60, right: 400, bottom: 40, left: 40 });   /* 오른쪽은 경로 카드 자리 */
+      lastBounds = b;
+      fitRoute();
       loadRoute();
     }
 

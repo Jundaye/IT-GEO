@@ -88,6 +88,9 @@
 		     , <include refid="mapper-archive.savedModelExpr"/> score_model
 		     , <choose><when test="@itgeo.to.AnalysisCriteriaTO@modelBConfig()"><include refid="mapper-building.bAreaText"/></when><otherwise>CONCAT_WS(' · ', IF(b.ugrnd_res = 1, '지하층', NULL), IF(b.sp_type = '고시원', '고시원', NULL), IF(b.viol_yn = '1', '위반건축물', NULL)
 		                      , IF(b.flood_cnt >= 1, '침수', NULL), IF(b.elev_m &lt;= 15, '저지대', NULL))</otherwise></choose> factor_text
+		     , IFNULL(rs.vuln_hh_cnt, 0) vuln_hh_cnt
+		     , <include refid="mapper-archive.scenExpr"/> scen_key
+		     , CASE WHEN JSON_VALID(l.criteria) THEN JSON_UNQUOTE(JSON_EXTRACT(l.criteria, '$.scenario')) END scen_base
 		     , (SELECT DATE_FORMAT(MAX(r.created_at), '%Y-%m-%d %H:%i') FROM survey_record r WHERE r.plan_id = p.plan_id) checked_at
 		     , (SELECT v.result FROM survey_record r JOIN visit_history v ON v.visit_id = r.visit_id WHERE r.plan_id = p.plan_id ORDER BY r.record_id DESC LIMIT 1) check_result
 		     , (SELECT r.content FROM survey_record r WHERE r.plan_id = p.plan_id ORDER BY r.record_id DESC LIMIT 1) check_content
@@ -95,6 +98,7 @@
 		  JOIN vulnerability_factor f ON f.factor_id = p.factor_id
 		  JOIN vulnerability_list l ON l.vulnerability_id = f.vulnerability_id
 		  JOIN building b ON b.bld_id = f.bld_id
+		  <include refid="mapper-building.statJoin"/>
 		 WHERE p.survey_id = #{surveyId}
 		 ORDER BY p.visit_order IS NULL, p.visit_order, p.plan_id
 	</select>

@@ -29,6 +29,9 @@ public class FieldItemTO {
 	// factor
 	private int score;              // 저장 당시 점수
 	private String factorText;
+	private int vulnHhCnt;          // 취약 가구 수 (bld_resident_stat)
+	private String scenKey;         // 저장할 때 쓴 가중치 시나리오 : base | rain | heat | cold | custom (mapper-archive.scenExpr)
+	private String scenBase;        // custom 일 때 어느 프리셋에서 고쳤는지
 	// 확인 기록 (survey_record + visit_history)
 	private String checkedAt;
 	private String checkResult;     // MET / ABSENT / REFUSED / OTHER
@@ -38,6 +41,12 @@ public class FieldItemTO {
 	private int legMin;             // 이전 지점에서 도보 분
 
 	public boolean isChecked() { return checkedAt != null; }
+	/** 구분 칸 글자 · 마우스 올림 설명 (보관함 · 리스트 편집과 같은 이름) */
+	public String getScenLabel() { return ArchiveRowTO.scenName(scenKey); }
+	public String getScenTitle() {
+		if ("custom".equals(scenKey)) return ArchiveRowTO.scenName(scenBase) + " 가중치에서 직접 고쳐서 저장";
+		return ArchiveRowTO.scenName(scenKey) + " 가중치로 분석해서 저장";
+	}
 	public String getTitle() {
 		String s = Common.shortAddr(addr);
 		return bldNm != null && !bldNm.isBlank() ? s + " " + bldNm : useNm != null ? s + " " + useNm : s;

@@ -7,9 +7,16 @@
 .fx-split .st-doing { --st: #f0a63a; }
 .fx-split .st-done  { --st: #4a8fe0; }
 
-/* 본문 : 리스트 | 지도 */
-.fx-split { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 1100px) { .fx-split { grid-template-columns: 1fr; } }
+/* 본문 : 리스트 | 가운데 버튼 | 지도. 두 가지 화면 (가운데 동그라미 버튼으로 바꿈)
+   .list-wide (기본) = 넓은 리스트 + 작은 지도(약도) + 지도 아래 경로 카드
+   .map-wide         = 좁은 리스트 + 큰 지도 + 지도 위에 뜬 경로 카드 */
+/* 움직임 : 칸 너비 · 지도 높이 · 버튼 위치가 같은 속도로 (.42초, 처음 빠르고 끝에 천천히).
+   칸 너비는 fieldlist.jsp applyCols 가 px 로 넣어 준다 (fr ↔ px 는 중간값이 없어 끊긴다). 아래 fr 값은 JS 가 돌기 전 · 좁은 화면용 */
+.fx-split { --fx-map-h: 420px; --fx-ease: cubic-bezier(.4, 0, .2, 1); --fx-dur: .42s;
+  display: grid; grid-template-columns: minmax(0, 1fr) 56px 520px; gap: 12px; align-items: start;
+  transition: grid-template-columns var(--fx-dur) var(--fx-ease); }
+.fx-split.fx-noanim, .fx-split.fx-noanim * { transition: none !important; }
+.fx-split.map-wide { --fx-map-h: max(560px, calc(100vh - 140px)); grid-template-columns: 440px 56px minmax(0, 1fr); }
 
 /* ---------- 왼쪽 : 리스트 ---------- */
 .fx-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -49,6 +56,17 @@
 .fx-item .ti a:hover { color: var(--primary); text-decoration: underline; }
 .fx-item .ti .addr, .fx-item .ti .leg { display: block; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fx-item .ti .leg { color: var(--text-3, #888); }
+/* 구분 · 취약 요인 · 취약 가구 : 리스트 크게 에서만 (지도 크게 에서는 칸이 좁아 숨김) */
+.fx-item .bd { flex: none; width: 76px; max-width: 76px; text-align: center; overflow: hidden; }
+.fx-item .bd .badge { padding: 2px 10px; white-space: nowrap; color: var(--text); }
+.fx-item .fac { flex: 1 1 auto; min-width: 0; max-width: 640px; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-item .bd, .fx-item .fac { transition: max-width var(--fx-dur) var(--fx-ease), opacity .14s ease, margin var(--fx-dur) var(--fx-ease); }
+.fx-item .fac small { font-size: 12px; color: var(--text-3, #888); }
+.fx-split .fx-item .ti { flex: 1 1 360px; transition: flex-grow var(--fx-dur) var(--fx-ease); }
+.fx-split.list-wide .fx-item .ti { flex-grow: 0; }
+/* 지도 크게 : 사라지는 칸은 폭을 0 으로 줄이며 흐려진다 (display:none 이면 뚝 끊김). margin -10px = flex gap 상쇄 */
+.fx-split.map-wide .fx-item .bd, .fx-split.map-wide .fx-item .fac { max-width: 0; opacity: 0; margin-left: -10px; }
+.fx-split.fx-anim .fx-item .bd, .fx-split.fx-anim .fx-item .fac { opacity: 0; }
 .fx-item .sc { flex: none; text-align: right; }
 .fx-item .sc b { display: block; font-size: 17px; font-weight: 700; color: #f05252; line-height: 1.1; }
 .fx-item .sc small { font-size: 11px; color: var(--text-3, #888); }
@@ -65,9 +83,34 @@
 .fx-add:hover { border-color: var(--primary); color: var(--primary); }
 .fx-add:hover span { border-color: var(--primary); }
 
-/* ---------- 오른쪽 : 지도 (스크롤해도 따라온다) ---------- */
-.fx-map { position: sticky; top: 16px; height: calc(100vh - 140px); min-height: 560px; margin-bottom: 0; }
-.fx-map .route-card { top: 16px; right: 16px; }
+/* ---------- 가운데 : 리스트 크게 ↔ 지도 크게 버튼 (지도 가운데 높이에 따라온다) ---------- */
+.fx-toggle-col { position: sticky; top: calc(16px + var(--fx-map-h) / 2 - 22px); margin-top: calc(var(--fx-map-h) / 2 - 22px);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  transition: top var(--fx-dur) var(--fx-ease), margin-top var(--fx-dur) var(--fx-ease); }
+.fx-toggle { position: relative; width: 44px; height: 44px; padding: 0; border: 1px solid var(--text); border-radius: 50%; background: var(--bg-panel); color: var(--text); cursor: pointer; }
+.fx-toggle:hover { border-color: var(--primary); color: var(--primary); }
+.fx-toggle i { transition: transform var(--fx-dur) var(--fx-ease), margin var(--fx-dur) var(--fx-ease); position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -3px;
+  border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }   /* ‹ : 지도를 왼쪽으로 넓힘 */
+.fx-split.map-wide .fx-toggle i { margin-left: -7px; transform: rotate(-135deg); }                            /* › : 리스트를 오른쪽으로 넓힘 */
+.fx-toggle-tx { font-size: 11px; color: var(--text-2); white-space: nowrap; }
+
+/* ---------- 오른쪽 : 지도 + 경로 카드 (스크롤해도 따라온다) ---------- */
+.fx-mapcol { position: sticky; top: 16px; min-width: 0; }
+.fx-map { height: var(--fx-map-h); margin-bottom: 0; transition: height var(--fx-dur) var(--fx-ease); }
 .fx-map .map-ctrl { right: 16px; bottom: 16px; }
+/* 경로 카드 : 지도 크게 = 지도 오른쪽 위에 뜸 / 리스트 크게 = 지도 아래에 붙음 (작은 지도를 가리지 않게) */
+.fx-mapcol .route-card { right: 16px; top: 16px; transition: opacity .2s ease; }
+/* 바뀌는 동안 경로 카드는 잠깐 숨김 (지도 아래 ↔ 지도 위로 자리를 옮기는 순간이 안 보이게) */
+.fx-split.fx-anim .fx-mapcol .route-card { opacity: 0; transition-duration: .14s; }
+.fx-split.list-wide .fx-mapcol .route-card { position: static; width: auto; margin-top: 12px; }
 .fx-map-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 11; padding: 12px 18px; font-size: 13px;
   color: var(--text-2); background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* 좁은 화면 : 위아래로 쌓고 버튼은 숨김 (지도는 약도 크기, 경로 카드는 지도 아래) */
+@media (max-width: 1100px) {
+  .fx-split, .fx-split.map-wide { --fx-map-h: 420px; grid-template-columns: 1fr; }
+  .fx-toggle-col { display: none; }
+  .fx-mapcol { position: static; }
+  .fx-split .fx-mapcol .route-card { position: static; width: auto; margin-top: 12px; }
+  .fx-split.map-wide .fx-item .bd, .fx-split.map-wide .fx-item .fac { display: none; }
+}
