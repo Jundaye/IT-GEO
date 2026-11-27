@@ -177,7 +177,7 @@
       window.navermap_authFailure = function () { map = null; if (prevFail) prevFail(); };
     }
     var $info = $('<div class="map-float tc walk-info"></div>').appendTo('#fxMap').hide();
-    var drawn = [], dash = null, routeLine = null, seq = 0, cur = null, lastBounds = null;
+    var drawn = [], dash = null, routeLine = null, seq = 0, cur = null, lastBounds = null, lastPts = [], lastAll = [];
 
     /* ---------- 리스트 크게 ↔ 지도 크게 ---------- */
     var VIEW_KEY = 'itgeo.fxView', $split = $('#fxSplit');
@@ -185,15 +185,47 @@
     /* 지도 크게 : 경로 카드가 지도 오른쪽 위에 떠 있어서 그만큼 비우고 맞춘다 */
     function fitRoute() {
       if (!map || !lastBounds) return;
-      map.fitBounds(lastBounds, mapWide() ? { top: 60, right: 400, bottom: 40, left: 40 } : { top: 50, right: 30, bottom: 30, left: 30 });
+      syncSize();                                          /* 맞추기 전에 지금 칸 크기를 먼저 알려 준다 */
+      var wide = mapWide() || !lastPts.length;
+      /* 지도 크게 : 출발지 포함 전체 동선 (오른쪽은 경로 카드 자리) / 약도 : 출발지(구청)는 빼고 담긴 건물만 (동 단위로 크게) */
+      fitTo(wide ? lastAll : lastPts, wide ? { top: 60, right: 400, bottom: 40, left: 40 } : { top: 50, right: 36, bottom: 36, left: 36 });
+    }
+
+    /* 점들이 지도 칸(#fxMap) 안에 다 들어오는 줌 · 가운데를 직접 계산해서 한 번에 넣는다 (애니메이션 없음).
+       네이버 fitBounds 는 움직이는 도중에 다른 리스트를 누르거나 크기가 바뀌면 엉뚱한 곳에 멈출 수 있어서 쓰지 않는다.
+       계산 = 웹 메르카토르 (256px 타일, 네이버 지도 v3 기본 지도와 같은 줌 단계) */
+    function merc(ll) { var s = Math.sin(ll.lat() * Math.PI / 180); return { x: (ll.lng() + 180) / 360, y: 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) }; }
+    function unmerc(x, y) { var n = Math.PI - 2 * Math.PI * y; return new naver.maps.LatLng(180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))), x * 360 - 180); }
+    function fitTo(pts, pad) {
+      if (!pts || !pts.length) return;
+      var box = document.getElementById('fxMap');
+      var aw = Math.max(80, box.clientWidth - pad.left - pad.right), ah = Math.max(80, box.clientHeight - pad.top - pad.bottom);
+      var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      pts.forEach(function (ll) { var m = merc(ll); x0 = Math.min(x0, m.x); x1 = Math.max(x1, m.x); y0 = Math.min(y0, m.y); y1 = Math.max(y1, m.y); });
+      var MAX_Z = 17, z = MAX_Z;
+      var kx = x1 > x0 ? aw / ((x1 - x0) * 256) : Infinity, ky = y1 > y0 ? ah / ((y1 - y0) * 256) : Infinity;
+      if (isFinite(Math.min(kx, ky))) z = Math.min(MAX_Z, Math.floor(Math.log(Math.min(kx, ky)) / Math.LN2));
+      z = Math.max(8, z);
+      var scale = 256 * Math.pow(2, z);
+      /* 여백이 한쪽만 크면(경로 카드 자리) 그만큼 가운데를 옮겨서 점들이 남은 자리 가운데에 오게 */
+      var cx = (x0 + x1) / 2 + (pad.right - pad.left) / 2 / scale, cy = (y0 + y1) / 2 + (pad.bottom - pad.top) / 2 / scale;
+      map.setZoom(z, false);
+      map.setCenter(unmerc(cx, cy));
     }
     /* 지도 칸 크기를 네이버 지도에 다시 알려 준다 (칸이 커지는 동안 매 프레임 · 끝나면 경로 맞춤) */
     function syncSize() {
       if (!map) return;
-      var el = document.getElementById('map');
-      if (el.clientWidth && el.clientHeight) map.setSize(new naver.maps.Size(el.clientWidth, el.clientHeight));
+      /* 크기는 바깥 칸(#fxMap)에서 잰다. 네이버 지도는 setSize 때 #map 에 px 크기를 직접 박아 넣어서,
+         #map 을 재면 지도 크게(넓을 때) 크기가 그대로 남아 약도에서 지도 가운데가 칸 밖으로 밀리고 건물이 잘렸다 */
+      var box = document.getElementById('fxMap'), el = document.getElementById('map');
+      var w = box.clientWidth, h = box.clientHeight;
+      if (!w || !h) return;
+      el.style.width = w + 'px'; el.style.height = h + 'px';
+      map.setSize(new naver.maps.Size(w, h));
     }
     function resizeMap() { syncSize(); fitRoute(); }
+    /* 지도 칸 크기가 바뀌면(버튼 · 창 크기 · 스크롤바 등 무엇 때문이든) 바로 네이버 지도에 알려 준다 */
+    if (map && window.ResizeObserver) new ResizeObserver(function () { syncSize(); }).observe(document.getElementById('fxMap'));
 
     /* 칸 너비를 px 로 정해 준다. fr(남는 칸) ↔ px 는 브라우저가 중간값을 못 만들어서 뚝 끊기기 때문에
        둘 다 px 로 바꿔야 grid-template-columns 가 부드럽게 움직인다. 숫자는 fieldlist.css 와 같게 */
@@ -335,7 +367,7 @@
       if (!map) return;
       seq++;                                   /* 앞 리스트의 늦은 TMAP 응답은 버린다 */
       clearMap();
-      if (!cur.items.length) { map.setCenter(new naver.maps.LatLng(cur.start.lat, cur.start.lng)); return; }
+      if (!cur.items.length) { lastBounds = null; lastPts = []; lastAll = []; map.setCenter(new naver.maps.LatLng(cur.start.lat, cur.start.lng)); return; }
       var path = [new naver.maps.LatLng(cur.start.lat, cur.start.lng)];
       drawn.push(new naver.maps.Marker({ position: path[0], map: map, zIndex: 90, title: '출발 · ' + cur.start.name,
         icon: { content: '<div class="mk-inv start-pin">출발</div>', anchor: new naver.maps.Point(16, 16) } }));
@@ -349,6 +381,8 @@
       var b = new naver.maps.LatLngBounds(path[0], path[0]);
       path.forEach(function (p) { b.extend(p); });
       lastBounds = b;
+      lastPts = path.slice(1);                           /* 건물만 (0번 = 출발지) */
+      lastAll = path.slice();                            /* 출발지 + 건물 */
       fitRoute();
       loadRoute();
     }
