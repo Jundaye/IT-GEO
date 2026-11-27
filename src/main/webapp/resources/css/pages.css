@@ -83,6 +83,11 @@ body:has(> .page-scroll) { overflow: hidden; }
 .lv-orange { --lv: #EC8B2F; }
 .lv-yellow { --lv: #E2B52A; }
 .lv-green  { --lv: #3E9E5A; }
+/* 라이트 테마 : 지도와 같은 한 단계 진한 구간 색 (57-3, 2026-11-27, map-config COLORS_LIGHT) */
+:root[data-theme="light"] .lv-red    { --lv: #B92B2F; }
+:root[data-theme="light"] .lv-orange { --lv: #CF6C12; }
+:root[data-theme="light"] .lv-yellow { --lv: #B8890A; }
+:root[data-theme="light"] .lv-green  { --lv: #2C7F46; }
 .badge { display: inline-block; padding: 1px 8px; line-height: 16px; border-radius: var(--radius); font-size: 11px; background: var(--bg-card); border: 1px solid var(--line); color: var(--text-2); }
 .badge.todo { color: var(--text); }
 .badge.doing { color: var(--primary); border-color: var(--primary); }
@@ -318,11 +323,12 @@ body:has(> .page-scroll) { overflow: hidden; }
 .fe-grid > .card { padding: 0; overflow: hidden; }
 .fe-grid .card-head { height: 44px; margin: 0; padding: 0 16px; background: var(--bg-card); border-bottom: 1px solid var(--line-soft); }
 .fe-grid .card-head h3 { font-size: 13px; }
-.fe-grid .pick-row { grid-template-columns: 14px minmax(0, 1fr) auto auto 28px 72px; height: 35px; padding: 0 14px; font-size: 12px; gap: 8px; }
+.fe-grid .pick-row { grid-template-columns: 14px minmax(0, 1fr) auto auto auto 72px; height: 35px; padding: 0 14px; font-size: 12px; gap: 8px; }
 .fe-grid .pick-row .pk-ti { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fe-grid .pick-row .tag { max-width: 130px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fe-grid .pick-row:last-child { border-bottom: 0; }
 .fe-grid .pick-row .sc { text-align: right; }
+.pick-row .sc-cell { display: inline-flex; align-items: center; justify-content: flex-end; white-space: nowrap; }
 .fe-grid .pick-row .tag { background: var(--bg-hover); border: 0; color: var(--text); padding: 2px 8px; }
 .fe-grid .fe-title { height: 40px; margin: 0 12px; padding: 0 12px; border: 1px solid var(--line-soft); border-top: 0; gap: 8px; }
 .fe-grid .fe-title .field { height: 30px; padding: 0 4px; border: 0; background: transparent; font-weight: 600; font-size: 13px; }
@@ -708,6 +714,8 @@ body.ml-lock, body.ml-lock .page-scroll { overflow: hidden; }   /* 모달이 떠
 .ml-sec h4 small { font-weight: 400; }
 
 /* 저장 점수의 산식 표시 (점수 모델 B, 2026-11-23) : B 환산 = 모델 B 로 저장, 기존 = 산식 정보 없이 저장된 점수 */
+/* 원점수 (26번, 2026-11-27) : 환산 점수 옆 회색 작은 글씨 */
+.raw-score { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-3); white-space: nowrap; }
 .tag-model { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; font-size: 10.5px; font-weight: 400; color: var(--text-2); vertical-align: middle; white-space: nowrap; }
 .tag-model.b { border-color: var(--primary); color: var(--primary); }
 .tag-model.b.rain { border-color: #4a8fe0; color: #4a8fe0; }   /* 폭우 시나리오 기준 저장 점수 (2026-11-24) */

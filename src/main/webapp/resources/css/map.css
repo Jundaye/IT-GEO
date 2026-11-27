@@ -339,8 +339,8 @@ body.dragging #pano { pointer-events: none; }   /* 손잡이를 끄는 동안 �
 .map-layout.top-n1 .scen-btn.mod .scen-mod { display: none; }
 .map-layout.top-n1 .scen-btn.mod::after { content: ""; position: absolute; right: -2px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: #fff; border: 1px solid var(--primary); }
 /* 접힘 : 선택한 시나리오 하나 ┃ 가중치 보기 | › . top-n3 = 자리가 모자라 잠깐 접어 보이는 것 (저장된 접힘 상태는 그대로) */
-.scen-bar.folded .scen-btn:not(.on), .map-layout.top-n3 .scen-bar .scen-btn:not(.on) { display: none; }
-.scen-bar.folded .scen-fold .ico, .map-layout.top-n3 .scen-bar .scen-fold .ico { transform: scaleX(-1); }
+.scen-bar.folded .scen-btn:not(.on), .map-layout.top-n3 .scen-bar:not(.force-open) .scen-btn:not(.on) { display: none; }
+.scen-bar.folded .scen-fold .ico, .map-layout.top-n3 .scen-bar:not(.force-open) .scen-fold .ico { transform: scaleX(-1); }
 /* 시나리오를 눌러 바뀐 요인 행 · 가중치 행을 0.6초 강조 (map-layer.js applyPreset) */
 @keyframes scen-flash { from { background: var(--primary-tint); } to { background: transparent; } }
 .f-row.flash, .wp-row.flash { animation: scen-flash .6s ease-out; }
@@ -613,6 +613,7 @@ body.dragging #pano { pointer-events: none; }   /* 손잡이를 끄는 동안 �
 .d-info th, .d-info td { height: 36px; padding: 0 14px; border-top: 1px solid var(--line-soft); text-align: left; }
 .d-info tr:first-child th, .d-info tr:first-child td { border-top: 0; }
 .d-info th { width: 96px; background: var(--bg-card); color: var(--text-2); font-weight: 400; border-right: 1px solid var(--line-soft); }
+.d-info td { word-break: keep-all; }   /* 55-5 : "1402호"의 "호"만 떨어지지 않게 띄어쓰기 단위로 줄바꿈 */
 /* 시설까지의 거리 : 가장 가까운 시설과 거리 */
 .welf-box { border: 1px solid var(--line); }
 .welf-row { display: grid; grid-template-columns: 82px 1fr auto; align-items: center; gap: 10px; height: 36px; padding: 0 14px; font-size: 12.5px; }
@@ -696,6 +697,9 @@ body.dragging #pano { pointer-events: none; }   /* 손잡이를 끄는 동안 �
 .b3-btn { width: 30px; height: 30px; padding: 0; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg-card); color: var(--text-2); cursor: pointer; display: grid; place-items: center; }
 .b3-btn:hover, .b3-btn.on { color: var(--text); border-color: var(--primary); }
 .b3-btn .ico { width: 14px; height: 14px; }
+/* 기본 시점 버튼 · 카메라 정보 (2026-11-27). 카메라 정보는 3D 화면(늘 어두움) 위 왼쪽 위, 흰 글자 */
+.b3-btn.b3-home { width: auto; padding: 0 8px; font-size: 11.5px; white-space: nowrap; }
+.b3-cam { position: absolute; left: 8px; top: 8px; padding: 2px 7px; border-radius: var(--radius); background: rgba(0,0,0,.45); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .b3-stage { position: relative; flex: 1; min-height: 0; background: var(--bg-card); }
 .b3-stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
 .b3-status { position: absolute; left: 10px; top: 10px; z-index: 3; max-width: calc(100% - 20px); padding: 6px 10px; font-size: 12px; color: var(--text-2); background: var(--bg-panel); border: 1px solid var(--line); pointer-events: none; }
@@ -763,6 +767,11 @@ body.dragging #pano { pointer-events: none; }   /* 손잡이를 끄는 동안 �
 .rs-split .cold-seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
 .rs-split .cold-seg button.on { background: #4a8fe0; border-color: #4a8fe0; color: #fff; font-weight: 600; }
 .rs-split .cold-note { display: block; font-size: 11px; color: var(--text-3); }
+/* 라이트 : 한파 표시의 파란색(#4a8fe0)을 라이트 전용 남색(--primary #1f4f9a)으로 (2026-11-27) */
+:root[data-theme="light"] .rs-split .cold-seg button.on { background: var(--primary); border-color: var(--primary); }
+:root[data-theme="light"] .rs-split .scope-tag.cold { background: var(--primary); color: #fff; }
+:root[data-theme="light"] .rs-cold { border-color: var(--primary); color: var(--primary); }
+:root[data-theme="light"] .d-scen-note b.cold-y { color: var(--primary); }
 .rs-cold { margin-left: 8px; padding: 0 6px; border-radius: var(--radius); border: 1px solid #4a8fe0; color: #4a8fe0; font-size: 10.5px; white-space: nowrap; }
 .rs-cold.unk { border-color: var(--line); color: var(--text-3); }
 .d-scen-note { margin: 8px 0 4px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid #4a8fe0; border-radius: var(--radius); font-size: 12px; color: var(--text-2); line-height: 1.6; }

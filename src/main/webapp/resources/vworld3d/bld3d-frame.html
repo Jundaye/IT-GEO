@@ -87,6 +87,9 @@
     viewer.scene.requestRenderMode = true;
     viewer.scene.maximumRenderTimeChange = Infinity;
     viewer.clock.onTick.addEventListener(function () { if (autoRotate && placed) { viewer.camera.rotateRight(0.004); viewer.scene.requestRender(); } });
+    /* 카메라 각도 · 거리 · 높이를 메인 화면에 알린다 (2026-11-27, 3D 창 아래 상시 표시). 1% 이상 움직였을 때만 → 가만히 있으면 보내지 않음 */
+    viewer.camera.percentageChanged = 0.01;
+    viewer.camera.changed.addEventListener(sendCam);
     console.log('[bld3d] ready 전송 · 캔버스 ' + viewer.canvas.clientWidth + 'x' + viewer.canvas.clientHeight);
     post('ready');
     if (pending) { var p = pending; pending = null; show(p); }
@@ -121,6 +124,7 @@
     if (e.data.type === 'pause' && viewer) viewer.useDefaultRenderLoop = false;     // 상세 패널 닫힘 : 그리기 멈춤
     if (e.data.type === 'resume' && viewer) { viewer.useDefaultRenderLoop = true; viewer.scene.requestRender(); }
     if (viewer) viewer.scene.requestRender();
+    if (e.data.type === 'home') goHome();                                           // [기본 시점] : 건물을 그린 직후 시점으로
     if (e.data.type === 'only') { onlyOne = !!e.data.on; keyVer++; applyClip(); viewer && viewer.scene.requestRender(); }
   });
 
@@ -294,6 +298,24 @@
     applyClip();
   }
 
+  /* ---------- 기본 시점 · 카메라 정보 (2026-11-27) ---------- */
+  var home = null, groundH = 0;                // home = 건물을 그린 직후의 {center, hpr}, groundH = 건물 바닥 높이 (카메라 높이 = 바닥 기준)
+  function deg(r) { return Math.round(r * 180 / Math.PI); }
+  function sendCam() {
+    if (!placed || !viewer) return;
+    var cam = viewer.camera, range = Cesium.Cartesian3.magnitude(cam.position);   // lookAt 중이라 position 은 건물 중심 기준 좌표
+    var hd = (deg(cam.heading) % 360 + 360) % 360;
+    post('cam', { heading: hd, pitch: deg(cam.pitch), range: Math.round(range), height: Math.round(cam.positionCartographic.height - groundH) });
+  }
+  function goHome() {
+    if (!home || !viewer) return;
+    autoRotate = false;
+    viewer.camera.cancelFlight();
+    viewer.camera.lookAt(home.center, home.hpr);
+    viewer.scene.requestRender();
+    sendCam();
+  }
+
   /* ---------- 4. 그리기 ---------- */
   function show(msg) {
     var seq = ++drawSeq, b = msg.bld;
@@ -372,6 +394,9 @@
     viewer.camera.cancelFlight();
     viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(rad(25), rad(-22), range));
     placed = true;
+    home = { center: center, hpr: new Cesium.HeadingPitchRange(rad(25), rad(-22), range) };
+    groundH = ground;
+    sendCam();
     console.log('[bld3d] 건물 그림 · 카메라를 건물에 고정 (거리 ' + Math.round(range) + 'm, 카메라 높이 ' + Math.round(viewer.camera.positionCartographic.height) + 'm) · 건물 레이어 ' + tilesets().length + '개 켬');
     clipRing = ring;
     var mySeq = drawSeq;

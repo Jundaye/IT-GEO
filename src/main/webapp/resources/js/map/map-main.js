@@ -120,7 +120,7 @@ $(function () {
     var area = [g ? g.name : '전체 3개 구', state.dong].concat(state.adms.map(admOfKey)).filter(Boolean).join(' · ');
     /* 앞머리 = 분석할 때의 기준 (2차 G) : "기준 폭우 · 범위 현재 화면" */
     var basis = state.scenRun ? '<span>기준</span> ' + Common.esc(scenName(state.scenRun) + (state.modRun ? '(수정됨)' : '')) + ' <span>·</span> ' : '';
-    if (C.MODEL_B && state.scenRun) basis = '<span>기준</span> ' + Common.esc(C.scenNow === 'rain' ? '폭우 시나리오 (고정 30·20·40·10)' : C.scenNow === 'cold' ? '한파 (기본 B + 현장확인 표시)' : '기본 B') + ' <span>·</span> ';
+    if (C.MODEL_B && state.scenRun) basis = '<span>기준</span> ' + Common.esc(C.scenNow === 'rain' ? '폭우 시나리오 (고정 30·20·40·10)' : C.scenNow === 'cold' ? '한파 (기본 + 현장확인 표시)' : '기본') + ' <span>·</span> ';
     var scopeHtml = byScreen() ? basis + '<span>범위</span> 현재 화면 <span>· 지도를 옮기면 \'이 지역에서 재검색\'</span>'
       : basis + '<span>범위</span> ' + Common.esc(area) + (state.q ? ' <span>· 검색은 화면 밖 건물도 찾습니다</span>' : '');
     /* 모델 B (2026-11-25) : 목록 머리 첫 줄은 시나리오 · 건수만 (MapResult.setScope). 기준 · 범위 문구는 그 줄의 ⓘ 안으로 */
@@ -194,6 +194,10 @@ $(function () {
       if (seq !== state.pointSeq) return;                 // 늦게 온 옛 응답
       state.lastRaw = { mode: mode, list: list };
       renderMarks();
+    }).fail(function () {
+      /* 57-2 (2026-11-27) : 실패하면 이전 분석의 핀 · 도넛이 지금 결과처럼 남지 않게 비운다 (지도 위치 · 확대는 그대로) */
+      if (seq !== state.pointSeq) return;
+      state.lastRaw = null; MapMarker.clear();
     });
   }
   /* 마지막 응답(lastRaw)을 지도에. riskOnly 면 기준점 이상 건물이 있는 묶음(빨간 숫자)과 기준점 이상 핀만. 선택한 건물은 항상 */
@@ -238,12 +242,12 @@ $(function () {
   function bModeText() {
     if (C.scenNow === 'rain') return '<b>폭우 기준</b> · 거처 30 / 건물 20 / 침수 40 / 접근성 10'
       + C.tip('<b>폭우 시나리오</b> · ' + Common.esc(C.B_SCEN.rain.note) + ' 침수 피해 확률 · 예측이 아니라 현장 우선확인 순서입니다.');
-    if (C.scenNow === 'cold') return '<b>한파</b> · 기본 B 점수 + ' + Common.esc((C.COLD_YEAR_MAX + 1) + '년 이전 사용승인') + ' 표시'
-      + C.tip('<b>한파 (표시 방식)</b> · ' + Common.esc(C.B_SCEN.cold.note) + ' 점수 · 순위는 기본 B 그대로입니다.');
+    if (C.scenNow === 'cold') return '<b>한파</b> · 기본 점수 + ' + Common.esc((C.COLD_YEAR_MAX + 1) + '년 이전 사용승인') + ' 표시'
+      + C.tip('<b>한파 (표시 방식)</b> · ' + Common.esc(C.B_SCEN.cold.note) + ' 점수 · 순위는 기본 그대로입니다.');
     return BASE_MODE;
   }
-  var BASE_MODE = '<b>기본 분석</b> (점수 모델 B) · 가중치 직접 조정'
-    + C.tip('<b>기본 분석</b> (점수 모델 B) · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.');
+  var BASE_MODE = '<b>기본 분석</b> · 가중치 직접 조정'
+    + C.tip('<b>기본 분석</b> · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.');
   if (C.MODEL_B) $('#bModeNote').html(BASE_MODE);
   $('#riskOnly').on('click', function () {
     state.riskOnly = !state.riskOnly;
@@ -397,7 +401,7 @@ $(function () {
     }
     /* 모델 B 점수 설명 줄 (2026-11-25) : 범례 끝 ⓘ 안으로. 기본 B 의 "점수 = 환산 점수 …" 는 왼쪽 패널 [지표 설명] 과 같은 설명이라 왼쪽에만 둔다 */
     if (C.MODEL_B && C.scenNow !== 'base') html += C.tip(Common.esc(C.scenNow === 'rain' ? '점수 = 폭우 시나리오 기준 우선확인 점수 (폭우 점수 3개 구 300번째 = 80점 · 최고 = 100점)'
-      : '점수 = 기본 B 환산 점수 그대로 · ' + (C.coldOnlyNow ? '한파 현장확인(기본 B 후보 중 ' + C.COLD_LABEL + ')만 표시 중' : '한파 전체 보기')), '점수 설명');
+      : '점수 = 기본 환산 점수 그대로 · ' + (C.coldOnlyNow ? '한파 현장확인(기본 후보 중 ' + C.COLD_LABEL + ')만 표시 중' : '한파 전체 보기')), '점수 설명');
     $('#legend').html(html);
     placeRefetch();                                   // 범례 높이가 바뀌면 재검색 버튼도 따라 올라간다
   }
@@ -532,16 +536,32 @@ $(function () {
     try { localStorage.setItem('itgeo.scenFold', f ? '1' : '0'); } catch (e) {}
     fitTop();
   }
-  $('#scenList').html(SCEN.map(function (v) {
+  /* 2026-11-27 : [가중치 보기] 를 맨 왼쪽으로. 접어도 [가중치 보기 ┃ 선택한 시나리오] 두 칸은 늘 보인다 (CSS .folded 는 선택 안 된 시나리오만 숨김) */
+  $('#scenList').html('<button type="button" class="scen-view" id="scenView">가중치 보기</button><i class="scen-sep"></i>' + SCEN.map(function (v) {
     return '<button type="button" class="scen-btn" data-scen="' + Common.esc(v.key) + '">'
       + (v.icon ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + Common.esc(v.icon) + '"/></svg>' : '') + Common.esc(v.name) + '<span class="scen-mod"> · 수정됨</span>'
       + (scenReady(v.key) ? '' : '<span class="scen-soon">준비 중</span>') + '</button>';
-  }).join('') + '<i class="scen-sep"></i><button type="button" class="scen-view" id="scenView">가중치 보기</button>');
+  }).join(''));
   $('#scenView').on('click', function () { $('#toggleLeft').trigger('click'); });   // 왼쪽 패널 여닫기 (탭과 같은 함수 → aria · 위쪽 줄 맞춤까지 같이)
   $('#scenFold').attr('aria-expanded', String(!$('#scenBar').hasClass('folded')));
-  $('#scenFold').on('click', function () { setFold(!$('#scenBar').hasClass('folded')); });
+  /* 지금 접힌 모양인지 : 직접 접었거나(.folded), 자리가 모자라 잠깐 접혀 보이는 중(top-n3)인데 펼치기를 누르지 않았거나 */
+  function looksFolded() {
+    var $b = $('#scenBar');
+    return $b.hasClass('folded') || ($('.map-layout').hasClass('top-n3') && !$b.hasClass('force-open'));
+  }
+  /* 55-3 (2026-11-27) : 좁아서 접혀 보일 때(top-n3)도 펼칠 수 있게. 펼치면 force-open (선택 · 분석 상태 · 입력값은 그대로) */
+  function openFold() {
+    /* 늘 붙인다 : 직접 접은 줄은 폭이 좁아 그 순간 top-n3 가 빠져 있다가, 펼치면 다시 top-n3 가 붙어 또 접혀 보였다 (2026-11-27 검증에서 발견).
+       force-open 은 top-n3 일 때만 효과가 있으므로 자리가 넉넉할 때 붙어 있어도 상관없다. [접기]를 누르면 뗀다 */
+    $('#scenBar').addClass('force-open');
+    setFold(false);
+  }
+  $('#scenFold').on('click', function () {
+    if (looksFolded()) openFold();
+    else { $('#scenBar').removeClass('force-open'); setFold(true); }
+  });
   $('#scenList').on('click', '.scen-btn', function () {
-    if ($('#scenBar').hasClass('folded')) { setFold(false); return; }     // 접힌 상태에서 남은 버튼 = 펼치기
+    if (looksFolded()) { openFold(); return; }     // 접힌 상태에서 남은 버튼 = 펼치기
     var k = $(this).attr('data-scen');
     /* 모델 B (4차) : 폭우 · 폭염 · 한파는 버튼만. 점수 · 가중치 · 선택을 바꾸지 않고 안내만 */
     if (!scenReady(k)) { Common.toast(scenName(k) + ' 시나리오 분석 기준 준비 중입니다. 점수 · 후보는 바뀌지 않습니다.'); return; }
@@ -549,6 +569,8 @@ $(function () {
     if (C.MODEL_B) {
       setScen(k);
       MapLayer.setScenB(k);
+      /* 55-6 (2026-11-27) : 시나리오마다 가중치가 그 시나리오 기본값으로 바뀌므로, 지금 적용 값을 한 번 알려 준다 (#bwSummary = 왼쪽 패널 요약과 같은 글자) */
+      Common.toast(scenName(k) + ' 기준으로 분석합니다 · ' + $('#bwSummary').text());
       if (k === 'cold') state.coldOnly = true;                            // 한파를 고르면 늘 [한파 현장확인] 보기부터
       var cb = MapLayer.getCriteria();
       if (k === 'cold') cb.coldOnly = true;
@@ -790,6 +812,9 @@ $(function () {
   function maskColor() { return (mapType !== 'sat' && Common.theme() !== 'light') ? '#f4f2ed' : '#0b0d12'; }
   /* 테마가 바뀌면 (헤더 버튼 → common.js 'wf:theme') : JS 로 색을 넣은 것만 다시. 지도 유형은 그대로 둔다 (테마와 지도 유형은 서로 건드리지 않는다) */
   $(document).on('wf:theme', function () {
+    C.applyThemeColors();                             // 57-3 : 라이트는 구간 색을 한 단계 진하게
+    legendKey = null; renderLegend(modeOf(zoomNow()));
+    MapMarker.clear(); renderMarks();                 // 핀 · 도넛을 새 색으로 (그려 둔 마커는 키가 같아 그대로 남으므로 비우고 다시)
     if (lock.mask) lock.mask.setOptions({ fillColor: maskColor() });
     loadGus();                                        // 구 색칠 (라이트는 한 단계 진하게)
   });

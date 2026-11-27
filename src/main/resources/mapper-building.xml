@@ -151,9 +151,9 @@
 		<if test="filterViol">AND b.viol_yn = '1'</if>
 		<if test="filterLowElev != null">AND b.elev_m &lt;= #{filterLowElev}</if>
 		<if test="filterCheapPct != null">AND b.price_pct IS NOT NULL AND b.price_pct &lt;= #{filterCheapPct}</if>
-		<if test="filterCand and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary}</if>
+		<if test="filterCand and !clusterAll and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary}</if>
 		<!-- 한파 [한파 현장확인만] : 기본 B 후보 ∩ 사용승인 연도 <= 1979 (ageExpr >= 2026 - 1979). 사용승인일이 없는 후보(확인 불가)는 [전체 보기]에서만 -->
-		<if test="coldFilter and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary} AND <include refid="mapper-building.ageExpr"/> >= #{coldAgeMin}</if>
+		<if test="coldFilter and !clusterAll and scaleBoundary != null">AND <include refid="mapper-building.scoreExprB"/> >= #{scaleBoundary} AND <include refid="mapper-building.ageExpr"/> >= #{coldAgeMin}</if>
 	</sql>
 
 	<!-- "지하층 · 노후 · 침수" (바깥 쿼리, t 기준) -->
@@ -221,27 +221,38 @@
 	<!-- 격자 묶음 (살피구로 AnalysisService.clusters() 와 같은 결과를 SQL 로)
 	     bbox 로 먼저 거르고(idx_building_coords), 칸 = FLOOR(lng/cell), FLOOR(lat/cellLat).
 	     hist = 점수 구간별 건물 수 (80+, 60~79, 40~59, 40 미만), risk_count = scoreMin 이상 -->
+	<!-- clusterAll (모델 B · 우선확인 후보만, 2026-11-27) : 후보만 고르면 칸 안 건물이 전부 80점 이상이라 링이 늘 빨강 한 색이었다.
+	     그래서 이때는 후보 조건만 빼고(나머지 조건 · 지역은 그대로) 칸 안 분석 대상 전체를 읽는다 (CLAUDE.md 도넛 규칙과 같게) :
+	     가운데 숫자(size) = 칸 안 전체 건물 수, 링 색 비율(h_*) = 전체, 빨간 배지(risk_count) = 우선확인 후보 수(목록 · 구 합과 같은 수),
+	     도넛 위치 = 후보들의 평균. 후보가 없는 칸은 그리지 않는다 -->
 	<select id="getClusterList" parameterType="itgeo.to.AnalysisCriteriaTO" resultType="itgeo.to.ClusterTO">
 		SELECT FLOOR(t.lng / #{cell})    ix
 		     , FLOOR(t.lat / #{cellLat}) iy
 		     , COUNT(*)                  size
-		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMinRaw} THEN t.lng END), AVG(t.lng)) lng   /* 도넛 위치 = 기준점 이상 건물들의 평균 (없으면 전체 평균) */
-		     , IFNULL(AVG(CASE WHEN t.score >= #{scoreMinRaw} THEN t.lat END), AVG(t.lat)) lat
-		     , SUM(t.score >= #{scoreMinRaw}) risk_count
+		     , IFNULL(AVG(CASE WHEN t.cand = 1 AND t.score >= #{scoreMinRaw} THEN t.lng END), AVG(CASE WHEN t.cand = 1 THEN t.lng END)) lng   /* 도넛 위치 = 기준점 이상 건물들의 평균 (없으면 전체 평균) */
+		     , IFNULL(AVG(CASE WHEN t.cand = 1 AND t.score >= #{scoreMinRaw} THEN t.lat END), AVG(CASE WHEN t.cand = 1 THEN t.lat END)) lat
+		     , SUM(t.cand = 1 AND t.score >= #{scoreMinRaw}) risk_count
 		     , SUM(t.checked)            checked_cnt
-		     , MAX(t.score)              max_score
+		     , MAX(CASE WHEN t.cand = 1 THEN t.score END) max_score
 		     , SUM(t.score >= #{band80Raw})                          h_red
 		     , SUM(t.score >= #{band60Raw} AND t.score &lt; #{band80Raw}) h_orange
 		     , SUM(t.score >= #{band40Raw} AND t.score &lt; #{band60Raw}) h_yellow
 		     , SUM(t.score &lt; #{band40Raw})                        h_green
 		     , MIN(t.lng) min_lng, MIN(t.lat) min_lat, MAX(t.lng) max_lng, MAX(t.lat) max_lat
-		     , MAX(t.bld_id) one_bld_id, MAX(t.bld_nm) one_bld_nm, MAX(t.addr) one_addr, MAX(t.use_nm) one_use_nm
+		     , MAX(CASE WHEN t.cand = 1 THEN t.bld_id END) one_bld_id, MAX(CASE WHEN t.cand = 1 THEN t.bld_nm END) one_bld_nm
+		     , MAX(CASE WHEN t.cand = 1 THEN t.addr END) one_addr, MAX(CASE WHEN t.cand = 1 THEN t.use_nm END) one_use_nm
 		  FROM (
+			<!-- cand = 표시 대상 : 우선확인 후보 (한파 [현장확인만] 이면 그중 사용승인 연도 <= COLD_YEAR_MAX, ageExpr 와 같은 규칙) -->
+			SELECT s.*, <choose><when test="clusterAll">(s.score >= #{scaleBoundary}<if test="coldFilter"> AND (CASE WHEN s.useapr_day REGEXP '^[0-9]{4}([0-9]{2}([0-9]{2})?)?$'
+			          AND CAST(LEFT(s.useapr_day, 4) AS SIGNED) BETWEEN 1900 AND 2026
+			         THEN 2026 - CAST(LEFT(s.useapr_day, 4) AS SIGNED) END) >= #{coldAgeMin}</if>)</when><otherwise>1</otherwise></choose> cand FROM (
 			<include refid="mapper-building.scoredSelect"/>
 			   AND b.lat BETWEEN #{minLat} AND #{maxLat}
 			   AND b.lng BETWEEN #{minLng} AND #{maxLng}
+			) s
 		  ) t
 		 GROUP BY ix, iy
+		 HAVING SUM(t.cand) > 0
 	</select>
 
 	<!-- 확대 : bbox 안 건물 핀 (점수 높은 순 · 동점 순서, 최대 limit) -->

@@ -68,7 +68,7 @@ window.MapPanel = (function () {
     /* 처음에는 모두 접어 둔다. 묶음 줄을 눌러야 요인별 표가 펼쳐진다 */
     $('#dScoreItems').html(d.scoreItems.map(function (it) { return scoreRow(it, maxW, false); }).join(''));
     if (!C.MODEL_B) $('#dScoreTotal').html('합계 <b>' + b.score + '</b>점');
-    else if (b.scoreTarget === false) $('#dScoreTotal').html('세대수가 없는 건물이라 점수 모델 B 분석 대상이 아닙니다 (우선확인 후보 · 집계 · 순위에서 제외)');
+    else if (b.scoreTarget === false) $('#dScoreTotal').html('세대수가 없는 건물이라 분석 대상이 아닙니다 (우선확인 후보 · 집계 · 순위에서 제외)');
     /* 점수 아래 작은 설명 문장은 ⓘ 안으로 (2026-11-25, 문구 그대로) */
     else if (d.scenario === 'rain') $('#dScoreTotal').html('폭우 시나리오 기준 우선확인 점수 <b>' + b.displayScore + '</b>점 · 계산용 원점수 <b>' + Number(b.rawScore).toFixed(2) + '</b>점 (영역별 기여 점수의 합)'
       + C.tip('폭우 고정 기준 거처 30 · 건물 상태 20 · 침수 기록 40 · 접근성 10. 3개 구 폭우 점수 300번째를 80점, 최고를 100점으로 맞춘 값' + (b.candidate ? ' · 80점 이상 = 폭우 우선확인 후보' : '') + '. 침수 피해 확률이 아닙니다.', '점수 설명'));
@@ -113,11 +113,11 @@ window.MapPanel = (function () {
       return;
     }
     var ym = d.coldYearMax || C.COLD_YEAR_MAX, head, more;
-    var COLD_COMMON = '한파는 새 점수식이 아니라 기본 B 점수 · 순위 그대로에 추가 확인 표시만 붙입니다.';
+    var COLD_COMMON = '한파는 새 점수식이 아니라 기본 점수 · 순위 그대로에 추가 확인 표시만 붙입니다.';
     if (b.coldCheck === 'Y') { head = '<b class="cold-y">한파 현장확인 대상</b> · ' + (ym + 1) + '년 이전 사용승인 (' + year + '년)'; more = esc(C.COLD_NOTE); }
-    else if (b.coldCheck === 'U') { head = '<b>사용승인일 확인 불가</b>'; more = '한파 확인 불가 · 사용승인일이 없어 대상 여부를 판단할 수 없습니다 (기본 B 우선확인 후보)'; }
+    else if (b.coldCheck === 'U') { head = '<b>사용승인일 확인 불가</b>'; more = '한파 확인 불가 · 사용승인일이 없어 대상 여부를 판단할 수 없습니다 (기본 우선확인 후보)'; }
     else if (b.candidate) { head = '<b>' + (ym + 1) + '년 이후 사용승인</b> (' + (year || '-') + '년)'; more = '한파 현장확인 해당 없음 · 사용승인 ' + (year || '-') + '년 (' + (ym + 1) + '년 이후 사용승인)'; }
-    else { head = '<b>한파 표시 대상 아님</b>'; more = '한파 현장확인은 기본 B 우선확인 후보 중에서만 봅니다' + (year ? ' (사용승인 ' + year + '년)' : ''); }
+    else { head = '<b>한파 표시 대상 아님</b>'; more = '한파 현장확인은 기본 우선확인 후보 중에서만 봅니다' + (year ? ' (사용승인 ' + year + '년)' : ''); }
     $n.html(head + C.tip(more + '<br>' + COLD_COMMON)).prop('hidden', false);
   }
 

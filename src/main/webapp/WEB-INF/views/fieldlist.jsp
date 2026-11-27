@@ -11,7 +11,7 @@
 <body>
 <%@ include file="/WEB-INF/views/include/header.jspf" %>
 <%-- 이 화면 전용 스타일 --%>
-<link rel="stylesheet" href="${ctx}/resources/css/fieldlist.css?v=20261127s">
+<link rel="stylesheet" href="${ctx}/resources/css/fieldlist.css">
 
 <%--
   현장 확인 리스트 + 현장 확인 상세(예전 fielddetail.jsp)를 한 화면에.

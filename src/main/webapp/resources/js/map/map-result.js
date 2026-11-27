@@ -42,7 +42,7 @@ window.MapResult = (function () {
     var title = (b.bldNm ? Common.shortAddr(b.addr) + ' ' + b.bldNm : Common.shortAddr(b.addr) + (b.useNm ? ' ' + b.useNm : ''));
     return '<div class="rs-row rs-nontarget" data-id="' + esc(b.bldId) + '" data-lat="' + b.lat + '" data-lng="' + b.lng + '">'
       + '<span class="rs-rank">' + b.rank + '</span>'
-      + '<div class="rs-body"><div class="rs-title">' + esc(title) + '</div><div class="rs-sub">세대수가 없는 건물 · 점수 모델 B 분석 비대상</div></div>'
+      + '<div class="rs-body"><div class="rs-title">' + esc(title) + '</div><div class="rs-sub">세대수가 없는 건물 · 분석 비대상</div></div>'
       + '<div class="rs-score"><em class="rs-under">분석 대상 아님</em></div></div>';
   }
 
@@ -64,8 +64,9 @@ window.MapResult = (function () {
   function emptyHtml(p) {
     if (p.q) return '<p class="rs-empty">"' + esc(p.q) + '" 에 맞는 건물이 없습니다. 주소나 건물명을 다시 확인해 보세요.</p>';
     var sc = getScope ? getScope() : {};
-    if (sc.screen) return '<p class="rs-empty"><b>이 화면 안에는 기준에 맞는 건물이 없어요.</b>지도를 넓히거나 다른 분석 기준을 골라 보세요.</p>';
-    return '<p class="rs-empty"><b>' + esc(sc.area || '이 범위') + '에는 기준에 맞는 건물이 없어요.</b>다른 분석 기준을 골라 보세요.</p>';
+    /* 57-2 (2026-11-27) : 문구 통일 "조건에 맞는 건물이 없습니다". 지도 핀 · 도넛도 같은 조건이라 함께 비워진다 */
+    if (sc.screen) return '<p class="rs-empty"><b>조건에 맞는 건물이 없습니다.</b>이 화면 안 기준입니다. 지도를 넓히거나 다른 분석 기준을 골라 보세요.</p>';
+    return '<p class="rs-empty"><b>조건에 맞는 건물이 없습니다.</b>' + esc(sc.area || '이 범위') + ' 기준입니다. 다른 분석 기준을 골라 보세요.</p>';
   }
 
   /* ---------- 모델 B 목록 머리 (2026-11-25 문구 줄이기) ----------
@@ -82,7 +83,7 @@ window.MapResult = (function () {
   }
   function headLabel(res, p) {
     var n = Common.num(res.total), sc = res.scenario || 'base';
-    var pre = sc === 'rain' ? '폭우' : sc === 'cold' ? '한파' : '기본 B';
+    var pre = sc === 'rain' ? '폭우' : sc === 'cold' ? '한파' : '기본';
     if (p.q) return { line: pre + ' · 검색 ' + n + '건', chip: '검색 ' + n + '건' };
     if (sc === 'cold' && p.coldOnly) return { line: '한파 현장확인 ' + n + '동', chip: '한파 현장확인 ' + n + '동' };
     return { line: pre + ' · ' + (p.filterCand ? '후보 ' : '전체 분석 대상 ') + n + '동',
@@ -93,12 +94,12 @@ window.MapResult = (function () {
     if (scopeHtml) tip.push(scopeHtml);
     if (res.candTotal != null && res.matchTotal != null) {
       var cond = hasCond(p);
-      tip.push((res.scenario === 'rain' ? '폭우 시나리오 기준 · ' : res.scenario === 'cold' ? '한파 · 기본 B 점수 그대로 · ' : '')
+      tip.push((res.scenario === 'rain' ? '폭우 시나리오 기준 · ' : res.scenario === 'cold' ? '한파 · 기본 점수 그대로 · ' : '')
         + (p.filterCand ? '우선확인 후보만 보는 중' : '전체 분석 대상 보는 중'));
       if (!cond) tip.push('분석 대상 전체 <b>' + Common.num(res.matchTotal) + '</b>동 / 그중 ' + (res.scenario === 'rain' ? '폭우 ' : '') + '우선확인 후보 <b>' + Common.num(res.candTotal) + '</b>동');
       if (res.coldTotal != null) {
         var rest = res.candTotal - res.coldTotal - res.coldUnknown;
-        tip.push('기본 B 우선확인 후보 ' + Common.num(res.candTotal) + '동 중 <b>한파 현장확인 ' + Common.num(res.coldTotal) + '동</b>'
+        tip.push('기본 우선확인 후보 ' + Common.num(res.candTotal) + '동 중 <b>한파 현장확인 ' + Common.num(res.coldTotal) + '동</b>'
           + ' (' + esc(C.COLD_LABEL) + ') · 확인 불가 ' + Common.num(res.coldUnknown) + '동 (사용승인일 없음) · 그 밖 ' + Common.num(rest) + '동');
         tip.push(esc(C.COLD_NOTE));
       }
@@ -115,12 +116,12 @@ window.MapResult = (function () {
     var cond = false;
     $.each(p, function (k, v) { if (/^filter/.test(k) && k !== 'filterCand' && v != null && v !== false) cond = true; });
     var tag = p.filterCand ? '<em class="scope-tag cand">우선확인 후보만 보는 중</em>' : '<em class="scope-tag all">전체 분석 대상 보는 중</em>';
-    var scenTag = res.scenario === 'rain' ? '<em class="scope-tag rain">폭우 시나리오 기준</em>' : res.scenario === 'cold' ? '<em class="scope-tag cold">한파 · 기본 B 점수 그대로</em>' : '';
+    var scenTag = res.scenario === 'rain' ? '<em class="scope-tag rain">폭우 시나리오 기준</em>' : res.scenario === 'cold' ? '<em class="scope-tag cold">한파 · 기본 점수 그대로</em>' : '';
     var html = scenTag + tag + (cond ? '조건 충족 전체' : '분석 대상 전체') + ' <b>' + Common.num(res.matchTotal) + '</b>동 / 그중 ' + (res.scenario === 'rain' ? '폭우 ' : '') + '우선확인 후보 <b>' + Common.num(res.candTotal) + '</b>동';
     /* 한파 : 180동은 새 점수의 상위 180동이 아니라 기본 B 후보 중 추가 확인 조건(사용승인 연도) 충족 건물 */
     if (res.coldTotal != null) {
       var rest = res.candTotal - res.coldTotal - res.coldUnknown, on = !!p.coldOnly;
-      html += '<span class="cold-line">기본 B 우선확인 후보 ' + Common.num(res.candTotal) + '동 중 <b>한파 현장확인 ' + Common.num(res.coldTotal) + '동</b>'
+      html += '<span class="cold-line">기본 우선확인 후보 ' + Common.num(res.candTotal) + '동 중 <b>한파 현장확인 ' + Common.num(res.coldTotal) + '동</b>'
         + ' (' + C.COLD_LABEL + ') · 확인 불가 ' + Common.num(res.coldUnknown) + '동 (사용승인일 없음) · 그 밖 ' + Common.num(rest) + '동</span>'
         + '<span class="cold-seg" role="group" aria-label="한파 보기">'
         + '<button type="button" data-coldview="target" class="' + (on ? 'on' : '') + '" aria-pressed="' + on + '">한파 현장확인 ' + Common.num(res.coldTotal) + '동</button>'

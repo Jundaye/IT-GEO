@@ -181,6 +181,9 @@ window.Bld3D = (function () {
       var m = e.data;
       if (m.type === 'ready') { ready = true; console.log('[bld3d] ready 받음 · 대기 메시지 ' + queue.map(function (x) { return x.type; }).join(', ')); flush(); }
       else if (m.type === 'status') status(m.text);
+      else if (m.type === 'cam') {                       // 카메라 정보 상시 표시 (2026-11-27). 마우스로 돌리면 같이 바뀐다
+        $('#b3Cam').prop('hidden', false).text('방향 ' + m.heading + '° · 기울기 ' + m.pitch + '° · 거리 ' + m.range + 'm · 높이 ' + m.height + 'm');
+      }
       else if (m.type === 'error') { status(m.text, true); loadFail(); }
       else if (m.type === 'drawn') {
         status(''); drawn = true; btn('ready');
@@ -195,6 +198,9 @@ window.Bld3D = (function () {
     $box.addClass('pre').prop('hidden', false);   // 투명 상태로만 둔다. iframe 은 첫 마커 클릭 때 불러온다
     $('#b3Expand').on('click', function () { $box.toggleClass('big'); });
     $('#b3Only').on('click', function () { var on = !$(this).hasClass('on'); $(this).toggleClass('on', on).attr('title', on ? '주변 건물 보이기' : '선택 건물만 보기'); send({ type: 'only', on: on }); });
+    $('#b3Home').on('click', function () {             // [기본 시점] : 처음 보던 각도로 (자동 회전도 끈다)
+      rotating = false; $('#b3Rotate').removeClass('on'); send({ type: 'home' });
+    });
     $('#b3Rotate').on('click', function () { rotating = !rotating; $(this).toggleClass('on', rotating); send({ type: 'rotate', on: rotating }); });
   }
 

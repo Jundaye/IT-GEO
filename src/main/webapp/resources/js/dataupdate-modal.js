@@ -242,11 +242,26 @@ $(function () {
       if ($m.hasClass('open')) showErr(LOST_MSG); else Common.toast('데이터 업데이트 : ' + LOST_MSG);
     });
   }
+  /* 최종 업데이트 시각 (2026-11-27) : 서버 응답의 updatedHead(월일시) · updatedFull(월일시분초). 값은 서버가 DB 반영 완료 때만 바꾼다 */
+  function setUpdatedAt(s) {
+    if (!s || !s.updatedHead) return;
+    $('#duHeadTimeVal').text(s.updatedHead);
+    $('#duHeadTime').attr('title', s.updatedFull || '');
+    $('#duUpdatedFull').text(s.updatedFull || s.updatedHead);
+  }
+  var justTimer = null;
+  function flashUpdated() {                                    // 초록 점 3초 (깜빡이지 않고 켜졌다 꺼짐)
+    var $t = $('#duHeadTime').addClass('just');
+    clearTimeout(justTimer);
+    justTimer = setTimeout(function () { $t.removeClass('just'); }, 3000);
+  }
   function startPoll() { stopPoll(); polling = true; finished = false; failN = 0; lost = false; headerRun(last); poll(); }
   function finish(s) {
     if (finished) return;                                     // 한 번만 (리뷰 3)
     finished = true;
     console.log('[dataupdate] finish · ' + s.status);
+    setUpdatedAt(s);
+    if (resultOf(s).kind === 'ok' && dbChanged(s)) flashUpdated();   // 실제로 DB 반영까지 성공했을 때만 초록 점 3초
     stopPoll();
     jobId = null; ssDel('itgeo.duJob'); ssSet('itgeo.duT1', String(Date.now()));
     headerIdle();
@@ -277,6 +292,7 @@ $(function () {
     if (jobId) { renderRun(last || { status: 'running', step: '준비', progress: 0 }, true); if (lost) showErr(LOST_MSG); return; }
     setView('idle'); $('#duLast').removeClass('ok fail').text('마지막 실행 결과를 확인하는 중…');
     $.ajax({ url: Common.url('api/dataupdate/latest.do'), dataType: 'json' }).done(function (s) {
+      setUpdatedAt(s);
       if (jobId || !$m.hasClass('open')) return;
       if (s && s.status === 'running') { $('#duLast').html('<small>지금</small>다른 창에서 시작한 업데이트가 실행 중입니다. 끝난 뒤 다시 열어 주세요.'); return; }
       if (ssGet('itgeo.duDone') && s && (s.report || s.status === 'error')) renderDone(s);   // 백그라운드에서 끝난 작업

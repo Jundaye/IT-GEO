@@ -106,6 +106,8 @@ public class AnalysisCriteriaTO {
 	private Integer filterAgeMin;         // 사용승인 후 N년 이상 (기준 연도 2026, ageExpr >= N)
 	private Double filterSlopeMin;        // 경사도 N° 초과 (slope_deg > N)
 	private boolean filterCand;           // 우선확인 후보만 (계산 점수 >= 3개 구 전체 300번째 경계)
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	private boolean clusterAll;           // 묶음 도넛만 : 후보 조건을 SQL 에서 빼고 가운데 숫자 · 링 = 칸 전체, 빨간 배지 = 후보 (MapService.getClusterList 가 정함, 2026-11-27)
 	// 추가 조회 조건 (legacy 요인. B 점수에는 넣지 않는다)
 	private boolean filterViol;           // 위반건축물 (viol_yn = '1')
 	private Double filterLowElev;         // 저지대 : 해발 N m 이하 (elev_m <= N)
@@ -141,7 +143,7 @@ public class AnalysisCriteriaTO {
 	public double getBand40Raw() { return scaled() ? itgeo.common.ScoreScale.inverse(40, scaleBoundary, scaleMax) : 40; }
 
 	/** 점수 모델 (설정값, AnalysisModel 이 시작할 때 넣음). 요청 파라미터로는 안 바뀐다 */
-	private static volatile String modelConfig = "legacy";
+	private static volatile String modelConfig = "b";
 	public static void setModelConfig(String m) {
 		modelConfig = m != null && "b".equalsIgnoreCase(m.trim()) ? "b" : "legacy";
 	}

@@ -17,6 +17,9 @@ public class ArchiveRowTO {
 	private double lat;
 	private double lng;
 	private int score;              // 저장 당시 점수 (vulnerability_score)
+	private Double rawScore;        // 모델 B 원점수 = 계산 점수 (vulnerability_factor.score, 2026-11-27). 그 전 저장분 · legacy 는 null
+	/** 원점수 표시 글자 ("46.25"), 없으면 null (보관함 · 05 화면에서 회색 작은 글씨) */
+	public String getRawText() { return rawScore == null ? null : String.format("%.2f", rawScore); }
 	private int vulnHhCnt;          // 취약 가구 수 (bld_resident_stat)
 	private int prioritySum;        // 가구 가점 합
 	private String factorText;      // 현재 기본 기준으로 계산한 요인 ("지하층 · 노후")

@@ -60,9 +60,11 @@
 	</insert>
  
 	<insert id="addFactor" parameterType="itgeo.to.ArchiveTO">
-		INSERT INTO vulnerability_factor (vulnerability_id, bld_id, is_applicable, vulnerability_score, vulnerability_grade)
-		VALUES (#{vulnerabilityId}, #{bldId}, 1, #{vulnerabilityScore}, #{vulnerabilityGrade})
-		ON DUPLICATE KEY UPDATE vulnerability_score = VALUES(vulnerability_score)
+		<!-- score = 모델 B 원점수(계산 점수, 환산 전, 소수 둘째 자리). 쓰지 않던 칸(01 '요인 점수')을 그대로 쓴다. legacy 는 NULL (2026-11-27, 26번) -->
+		INSERT INTO vulnerability_factor (vulnerability_id, bld_id, is_applicable, score, vulnerability_score, vulnerability_grade)
+		VALUES (#{vulnerabilityId}, #{bldId}, 1, #{rawScore}, #{vulnerabilityScore}, #{vulnerabilityGrade})
+		ON DUPLICATE KEY UPDATE score = VALUES(score)
+		                      , vulnerability_score = VALUES(vulnerability_score)
 		                      , vulnerability_grade = VALUES(vulnerability_grade)
 		                      , evaluated_at = NOW()
 	</insert>
@@ -78,6 +80,7 @@
 		SELECT f.factor_id, f.vulnerability_id, l.title, f.bld_id
 		     , t.sgg_cd, t.emd_nm, t.addr, t.bld_nm, t.use_nm, t.lat, t.lng
 		     , CAST(f.vulnerability_score AS SIGNED) score
+		     , f.score raw_score
 		     , <include refid="mapper-archive.savedModelExpr"/> score_model
 		     , <include refid="mapper-archive.savedBasisExpr"/> score_basis
 		     , t.vuln_hh_cnt, t.priority_sum
@@ -185,7 +188,7 @@
 	<!-- 내 보관함의 이 건물 (가장 최근 저장분). 저장 점수 · 어느 분석 리스트인지 -->
 	<select id="getFactorByBld" resultType="itgeo.to.ArchiveTO">
 		SELECT f.factor_id, f.vulnerability_id, f.bld_id
-		     , CAST(f.vulnerability_score AS SIGNED) vulnerability_score, f.vulnerability_grade
+		     , CAST(f.vulnerability_score AS SIGNED) vulnerability_score, f.vulnerability_grade, f.score raw_score
 		     , <include refid="mapper-archive.savedModelExpr"/> score_model
 		     , <include refid="mapper-archive.savedBasisExpr"/> score_basis
 		     , DATE_FORMAT(f.evaluated_at, '%Y-%m-%d') evaluated_at

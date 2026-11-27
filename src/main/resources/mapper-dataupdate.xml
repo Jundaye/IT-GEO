@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="mapper-dataupdate">
+	<!-- 헤더 "최종 업데이트" 의 처음 값 (2026-11-27). 웹이 기록한 완료 시각 파일이 아직 없을 때만 쓴다 (DataUpdateService.updatedAt).
+	     배치의 DB 반영(db_swap)은 새 building 테이블로 바꿔 끼우므로 CREATE_TIME = 마지막 전체 반영 시각. 조회만 한다 -->
+	<select id="getBuildingLoadedAt" resultType="String">
+		SELECT DATE_FORMAT(create_time, '%Y-%m-%d %H:%i:%s')
+		  FROM information_schema.tables
+		 WHERE table_schema = DATABASE() AND table_name = 'building'
+	</select>
+</mapper>

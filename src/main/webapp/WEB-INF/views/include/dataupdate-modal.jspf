@@ -10,6 +10,8 @@
       <div class="du-head-txt">
         <h3 id="duTitle">데이터 업데이트</h3>
         <p>원천 파일(건물·건축물대장·침수흔적도 등) 중 바뀐 것만 다시 읽어 건물 데이터를 고칩니다.</p>
+        <%-- 최종 업데이트 : 월 · 일 · 시 · 분 · 초까지 (2026-11-27) --%>
+        <p class="du-updated">최종 업데이트 <b id="duUpdatedFull"><c:out value="${empty applicationScope.dataUpdatedFull ? '기록 없음' : applicationScope.dataUpdatedFull}"/></b></p>
       </div>
       <button type="button" class="du-x" id="duX" aria-label="닫기"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>

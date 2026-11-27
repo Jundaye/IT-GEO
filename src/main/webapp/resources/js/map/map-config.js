@@ -144,7 +144,7 @@ window.MAP_CONFIG = {
     rain: { name: '폭우', weights: { H: 30, O: 20, R: 40, A: 10 }, rLabel: '침수 기록', rNote: '침수 기록 연도 수 (경사 제외)',
             basis: '폭우 시나리오 기준 우선확인 점수', note: '폭우 시나리오 고정 기준 (H 30 · O 20 · F 40 · A 10). 지형·재해 대신 침수 기록 연도 수만 쓰고, 환산 기준(300번째 · 최고)도 폭우 점수로 따로 구합니다.' },
     cold: { name: '한파', weights: { H: 25, O: 25, R: 25, A: 25 },
-            basis: '기본 B 점수 + 한파 현장확인 표시', note: '한파는 새 점수식이 없습니다. 기본 B(25 · 25 · 25 · 25) 우선확인 후보 중 ' + ((window.APP_COLD_YEAR || 1979) + 1) + '년 이전 사용승인 건물을 「한파 현장확인」으로 표시합니다.' }
+            basis: '기본 점수 + 한파 현장확인 표시', note: '한파는 새 점수식이 없습니다. 기본(25 · 25 · 25 · 25) 우선확인 후보 중 ' + ((window.APP_COLD_YEAR || 1979) + 1) + '년 이전 사용승인 건물을 「한파 현장확인」으로 표시합니다.' }
   };
   /* 한파 현장확인 기준 연도 (서버 AnalysisCriteriaTO.COLD_YEAR_MAX 한 곳, map.jsp 가 APP_COLD_YEAR 로 넘김) */
   C.COLD_YEAR_MAX = window.APP_COLD_YEAR || 1979;
@@ -183,4 +183,13 @@ window.MAP_CONFIG = {
       { min: 0,  key: 'green',  label: '환산 40점 미만', rank: 1 }
     ];
   }
+  /* 57-3 (2026-11-27) : 라이트 테마에서는 도넛 · 핀 · 범례 · 목록 점수 색을 한 단계 진하게 (밝은 지도 위에서 잘 보이게).
+     C.COLORS 를 쓰는 곳은 그대로 두고 값만 바꾼다. 테마를 바꾸면 map-main.js 'wf:theme' 이 다시 불러 다시 그린다 */
+  C.COLORS_DARK = { red: C.COLORS.red, orange: C.COLORS.orange, yellow: C.COLORS.yellow, green: C.COLORS.green };
+  C.COLORS_LIGHT = { red: '#B92B2F', orange: '#CF6C12', yellow: '#B8890A', green: '#2C7F46' };
+  C.applyThemeColors = function () {
+    var src = document.documentElement.getAttribute('data-theme') === 'light' ? C.COLORS_LIGHT : C.COLORS_DARK;
+    Object.keys(src).forEach(function (k) { C.COLORS[k] = src[k]; });
+  };
+  C.applyThemeColors();
 })(window.MAP_CONFIG);

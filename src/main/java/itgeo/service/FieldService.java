@@ -197,12 +197,14 @@ public class FieldService {
 	}
 
 	/** 05 현장 확인 결과 입력 (ArchiveService 가 plan 을 확인한 뒤 부른다) : visit_history 1건 + survey_record 1건 */
+	@Transactional   // 둘 중 하나가 실패하면 둘 다 취소 (2026-11-27)
 	public void addCheck(FieldCheckTO c) {
 		dao.addVisit(c);
 		dao.addRecord(c);
 	}
 
 	// 확인 완료 처리 : visit_history 1건 + survey_record 1건
+	@Transactional
 	public boolean checkItem(FieldCheckTO c) {
 		FieldListTO f = dao.getField(c.getSurveyId(), c.getUserId(), null);
 		if (f == null) return false;

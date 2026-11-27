@@ -35,7 +35,8 @@
               <%-- 구분 = 보관함에 저장할 때 쓴 가중치 (기본 · 폭우 · 폭염 · 한파 · 사용자 설정). 보관함 화면 구분 칸과 같은 값 --%>
               <span class="badge scen scen-${p.scenKey}" title="<c:out value='${p.scenTitle}'/>"><c:out value="${p.scenLabel}"/></span>
               <span class="tag"><c:out value="${empty p.factorText ? '요인 없음' : fn:split(p.factorText, '·')[0]}"/><c:if test="${p.vulnHhCnt > 0}"> · 가구 ${p.vulnHhCnt}</c:if></span>
-              <span class="sc">${p.score}</span><c:choose><c:when test="${p.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose>
+              <%-- 점수 + 산식 태그는 한 칸 (2026-11-27 : 태그가 따로 칸을 차지해 7칸이 되면서 마지막 배지가 체크박스 자리로 밀려 깨졌다) --%>
+              <span class="sc-cell"><span class="sc">${p.score}</span><c:choose><c:when test="${p.scoreModel == 'b'}"><small class="tag-model b" title="점수 모델 B 환산 점수로 저장 (80점 이상 = 우선확인 후보)">B 환산</small></c:when><c:when test="${scoreModelB}"><small class="tag-model" title="산식 정보 없이 저장된 기존 점수. 지금 화면의 환산 점수와 기준이 다를 수 있습니다">기존</small></c:when></c:choose></span>
               <span>
                 <c:choose>
                   <c:when test="${p.surveyId == field.surveyId and field.surveyId > 0}"><span class="badge blue">이 리스트</span></c:when>

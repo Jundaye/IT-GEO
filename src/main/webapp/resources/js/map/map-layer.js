@@ -94,10 +94,16 @@ window.MapLayer = (function () {
     if ((bw.H || 0) + (bw.R || 0) + (bw.A || 0) <= 0) return '건물 상태만으로는 분석할 수 없어요 (사용승인일이 없는 건물이 있음). 다른 영역도 하나 이상 0보다 크게 해 주세요';
     return null;
   }
-  /* 기상 시나리오 (2026-11-24) : 폭우 · 한파는 고정 프리셋. 팝업 · 요약에는 고정 기준을 보여 주되 bw(기본 모드 입력값)는 건드리지 않는다 → 기본으로 돌아오면 그대로 */
+  /* 기상 시나리오 (2026-11-24) : 폭우 · 한파는 고정 프리셋. 팝업 · 요약에는 고정 기준을 보여 주되 bw(기본 모드 입력값)는 건드리지 않는다 → 기본으로 돌아오면 기본값으로 초기화 (55-6) */
   var scenB = 'base';
   function fixedB() { return C.B_SCEN && C.B_SCEN[scenB] ? C.B_SCEN[scenB] : null; }
-  function setScenB(k) { scenB = k || 'base'; refreshB(); }
+  function setScenB(k) {
+    var prev = scenB;
+    scenB = k || 'base';
+    /* 55-6 (2026-11-27) : 폭우 · 한파에서 기본으로 돌아오면 예전 입력값을 되살리지 않고 기본값(100씩)으로 초기화 */
+    if (scenB === 'base' && prev !== 'base') { resetB(); return; }
+    refreshB();
+  }
   function refreshFixedB(fx) {
     var w = fx.weights, sum = C.B_WEIGHTS.reduce(function (s, g) { return s + (w[g.key] || 0); }, 0);
     C.B_WEIGHTS.forEach(function (g) {
@@ -108,7 +114,7 @@ window.MapLayer = (function () {
     });
     $('.wp-row[data-bw]').addClass('fixed');
     $('#weightReset').prop('disabled', true);
-    $('#wbSum').removeClass('warn').text(fx.name + ' 시나리오 고정 기준 · 기본 모드에서 정한 입력값은 그대로 보관됩니다');
+    $('#wbSum').removeClass('warn').text(fx.name + ' 시나리오 고정 기준 · 기본으로 돌아가면 기본값(100씩)으로 초기화됩니다');
     $('#bwSummary').text(fx.name + ' 고정 : ' + C.B_WEIGHTS.map(function (g) { return (g.key === 'R' && fx.rLabel ? fx.rLabel : g.label) + ' ' + fmtPct(sum > 0 ? w[g.key] * 100 / sum : 0); }).join(' · '));
     $('#btnRun').prop('disabled', false);
   }

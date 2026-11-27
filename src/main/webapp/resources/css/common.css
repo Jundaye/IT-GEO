@@ -104,6 +104,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   white-space: nowrap;
 }
 .app-header .brand-logo { font-size: 19px; }
+/* 로고 이미지 (2026-11-27) : 364×93 원본을 높이 26px 로. 라이트/다크 중 하나만 */
+.app-header .brand-img { height: 26px; width: auto; display: block; }
+.brand-img-dark { display: none !important; }
+:root[data-theme="dark"] .brand-img-light { display: none !important; }
+:root[data-theme="dark"] .brand-img-dark { display: block !important; }
 .app-header .brand-sub { font-size: 12px; color: var(--text-2); }
 .header-right .btn { height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; border-color: var(--line); gap: 6px; }
 
@@ -304,6 +309,14 @@ input[type=range] { accent-color: var(--primary); }
 .map-ctrl button:hover { background: var(--bg-hover); }
 
 /* ---------- 데이터 업데이트 (2차 11-17) : 헤더 버튼 진행 표시 + 모달 (include/dataupdate-modal.jspf · js/dataupdate-modal.js) ---------- */
+/* 최종 업데이트 (2026-11-27) : 헤더 데이터 업데이트 버튼 왼쪽. 업데이트 성공 직후 3초만 초록 점 (애니메이션 없음) */
+.du-time { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.du-time b { font-weight: 600; color: var(--text-2); }
+.du-time .du-ok-dot { display: none; width: 7px; height: 7px; border-radius: 50%; background: #3e9e5a; }
+.du-time.just .du-ok-dot { display: inline-block; }
+.du-time.just b { color: #3e9e5a; }
+.du-updated { margin-top: 4px; font-size: 12px; color: var(--text-3); }
+.du-updated b { font-weight: 600; color: var(--text-2); }
 .du-open { position: relative; overflow: hidden; }
 .du-open.running { border-color: var(--primary); color: var(--text); }
 .du-hbar { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--primary); transition: width .4s; }

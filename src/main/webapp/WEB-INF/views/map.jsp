@@ -1,6 +1,6 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
-<c:set var="pageTitle" value="취약공간 분석 지도"/>
+<c:set var="pageTitle" value="취약시설 분석"/>
 <c:set var="pageCss" value="map"/>
 <c:set var="activeMenu" value="map"/>
 <!DOCTYPE html>
@@ -24,7 +24,7 @@
       <section class="sec">
         <div class="sec-head"><span class="caret"></span>분석 모드</div>
         <div class="sec-body">
-          <p class="sec-note b-mode" id="bModeNote"><b>기본 분석</b> (점수 모델 B) · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.</p>
+          <p class="sec-note b-mode" id="bModeNote"><b>기본 분석</b> · 가중치를 직접 조정할 수 있습니다. 폭우 · 한파는 고정 기준, 폭염은 <b>분석 기준 준비 중</b>입니다.</p>
         </div>
       </section>
 
@@ -40,7 +40,7 @@
           <div class="f-row has-rng" data-bf="flood"><label class="chk"><input type="checkbox" class="bf-chk"> 침수 기록 연도 수</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
           <div class="f-row has-rng" data-bf="age"><label class="chk"><input type="checkbox" class="bf-chk"> 사용승인 후 연수</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
           <div class="f-row has-rng" data-bf="slope"><label class="chk"><input type="checkbox" class="bf-chk"> 경사도</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
-          <p class="bf-sub">추가 조회 조건 <small>B 점수에는 넣지 않음</small></p>
+          <p class="bf-sub">추가 조회 조건 <small>점수에는 넣지 않음</small></p>
           <div class="f-row" data-bf="viol"><label class="chk"><input type="checkbox" class="bf-chk"> 위반건축물</label><span class="f-val">대장 등재</span></div>
           <div class="f-row has-rng" data-bf="low"><label class="chk"><input type="checkbox" class="bf-chk"> 저지대 (해발)</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
           <div class="f-row has-rng" data-bf="cheap"><label class="chk"><input type="checkbox" class="bf-chk"> 저가 주택 (공시가격 백분위)</label><input type="range" class="f-rng bf-rng"><span class="f-val"></span></div>
@@ -271,6 +271,8 @@
     <div class="b3-head">
       <b>건물 3D 입체보기</b><span class="b3-sub" id="b3Sub"></span>
       <button type="button" class="b3-btn on" id="b3Only" title="주변 건물 보이기"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16"/><path d="M3 20h18"/></svg></button>
+      <%-- 기본 시점 (2026-11-27) : 마우스로 돌린 뒤 처음 보던 각도(방향 25° · 기울기 -22°)로 돌아간다 --%>
+      <button type="button" class="b3-btn b3-home" id="b3Home" title="기본 시점으로">기본 시점</button>
       <button type="button" class="b3-btn" id="b3Rotate" title="자동 회전"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg></button>
       <button type="button" class="b3-btn" id="b3Expand" title="크게 보기 / 작게 보기"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       <button type="button" class="b3-btn" id="b3Close" title="닫기"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -279,6 +281,8 @@
       <iframe id="b3Frame" title="건물 3D 입체보기"></iframe>
       <div class="b3-status" id="b3Status"></div>
       <div class="b3-hint">드래그 = 건물 둘레로 360° 회전 · 휠 = 확대/축소</div>
+      <%-- 카메라 정보 상시 표시 (2026-11-27). 건물을 그린 뒤부터, 마우스로 움직이면 같이 바뀐다 (map-3d.js 'cam') --%>
+      <div class="b3-cam" id="b3Cam" hidden></div>
       <%-- 로딩 표시 (2차 지시문 I) : 다 그려질 때까지 3D 영역을 덮는다. 실패 · 15초 초과면 아래 b3Fail 로 바뀐다 --%>
       <div class="b3-loading" id="b3Loading" hidden><i class="b3-spin"></i><span>3D 건물을 불러오는 중…</span></div>
       <div class="b3-loading b3-fail" id="b3Fail" hidden><span>3D를 불러오지 못했습니다</span><button type="button" class="btn btn-line btn-sm" id="b3Retry">다시 시도</button></div>

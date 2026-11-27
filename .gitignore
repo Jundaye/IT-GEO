@@ -22,3 +22,6 @@ reference/db/*
 
 # 팀원 안내 문서 (로컬 전용)
 ITGEO_이름변경_안내.md
+
+# DB 성능 설정 (MySQL 버퍼 풀 2GB, 각자 PC 에서만 실행 · 커밋 안 함)
+reference/db/0_first_setting.sql

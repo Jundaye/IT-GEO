@@ -68,7 +68,7 @@
       <h3 class="d2-title">이어서 보기</h3>
       <div class="cont-list">
         <c:forEach var="r" items="${d.recent}">
-          <c:set var="tabNm" value="${r.menu == 'map' ? '취약공간 분석 지도' : r.menu == 'field' ? '현장 확인 리스트' : '보관함'}"/>
+          <c:set var="tabNm" value="${r.menu == 'map' ? '취약시설 분석' : r.menu == 'field' ? '현장 확인 리스트' : '보관함'}"/>
           <a class="cont-item" href="${ctx}/<c:out value='${r.url}'/>">
             <i class="cont-ico ico-${r.menu}" aria-hidden="true"></i>
             <span class="cont-txt">

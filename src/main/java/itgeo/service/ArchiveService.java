@@ -12,6 +12,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -103,6 +104,7 @@ public class ArchiveService {
 	 * 같은 구 · 같은 기준(JSON)의 분석 리스트가 있으면 거기에, 없으면 리스트를 새로 만들어 넣는다 (분석 1회 = 리스트 1개).
 	 * 없는 건물 → IllegalArgumentException(400), 구청 계정이 다른 구 건물 → ForbiddenException(403). score 가 null 이면 기준(JSON)으로 계산한 값.
 	 */
+	@Transactional   // 분석 리스트 + 건물 저장을 한 번에 (2026-11-27)
 	public Map<String, Object> addArchive(MemberTO member, String bldId, Integer score, String criteriaJson) {
 		long userId = member.getUserId();
 		AnalysisCriteriaTO c = parseCriteria(criteriaJson);
@@ -155,6 +157,8 @@ public class ArchiveService {
 		}
 		to.setBldId(bldId);
 		to.setVulnerabilityScore(saveScore);
+		// 원점수(계산 점수)도 같이 남긴다 : 환산 점수는 저장 당시 환산 기준에 따라 바뀌므로 비교용 (26번, 2026-11-27)
+		to.setRawScore(c.isModelB() && sb.getRawScore() != null ? Math.round(sb.getRawScore() * 100) / 100.0 : null);
 		to.setVulnerabilityGrade(c.isModelB() ? gradeB(saveScore) : grade(saveScore));
 		dao.addFactor(to);
 
@@ -408,6 +412,7 @@ public class ArchiveService {
 	 * 그 건물이 내 현장확인 리스트에 없으면 IllegalStateException("현장확인 리스트에 먼저 담아 주세요").
 	 * 방문 일시가 형식에 안 맞거나 미래, 방문 결과가 정해진 값이 아니면 IllegalArgumentException (15단계 D-12)
 	 */
+	@Transactional   // visit_history + survey_record 를 한 번에 (2026-11-27)
 	public long addCheck(long userId, String bldId, String visitedAt, String result, Map<String, String> checks,
 			List<String> added, String content, Integer scoreAdj) {
 		Long planId = dao.getPlanByBld(userId, bldId);

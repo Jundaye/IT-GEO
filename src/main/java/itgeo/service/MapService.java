@@ -224,7 +224,14 @@ public class MapService {
 			c.setMaxLng((Math.floor(c.getMaxLng() / cell) + 1) * cell);
 			c.setMaxLat((Math.floor(c.getMaxLat() / cellLat) + 1) * cellLat);
 		}
-		List<ClusterTO> list = dao.getClusterList(c);
+		// 모델 B · 우선확인 후보만 : 가운데 숫자 · 링 색 비율은 칸 안 분석 대상 전체, 빨간 배지는 후보 수 (mapper getClusterList). 요청 값은 무시하고 여기서만 정한다
+		c.setClusterAll(c.isModelB() && (c.isFilterCand() || c.isColdFilter()) && c.getScaleBoundary() != null);   // 한파 [현장확인만] 도 같은 방식
+		List<ClusterTO> list;
+		try {
+			list = dao.getClusterList(c);
+		} finally {
+			c.setClusterAll(false);
+		}
 		for (ClusterTO cl : list) {
 			if (c.isModelB() && c.getScaleBoundary() != null) cl.setMaxScore(ScoreScale.scaled(cl.getMaxScore(), c.getScaleBoundary(), c.getScaleMax()));
 			cl.setCell(new double[] { cl.getIx() * cell, cl.getIy() * cellLat, (cl.getIx() + 1) * cell, (cl.getIy() + 1) * cellLat });

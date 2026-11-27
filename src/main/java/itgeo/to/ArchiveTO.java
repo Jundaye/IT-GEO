@@ -20,6 +20,9 @@ public class ArchiveTO {
 	private Long factorId;
 	private String bldId;
 	private Integer vulnerabilityScore;
+	private Double rawScore;        // 모델 B 원점수 = 계산 점수 (vulnerability_factor.score, 소수 둘째 자리). legacy · 예전 저장분은 null
+	/** 원점수 표시 글자 ("46.25"), 없으면 null (보관함 · 05 화면에서 회색 작은 글씨) */
+	public String getRawText() { return rawScore == null ? null : String.format("%.2f", rawScore); }
 	private String vulnerabilityGrade;
 	private String evaluatedAt;
 	// 저장 점수의 산식 : "b" = 점수 모델 B 환산 점수로 저장 (보관함 리스트 criteria JSON 의 model). null = 산식 정보 없이 저장된 기존 점수
